@@ -1,11 +1,24 @@
-// Cloudflare Workers config: serves the static site in ./public (no build step).
+// Cloudflare Workers config.
+// - Static site: ./public, served directly.
+// - /api/*: runs src/index.js, which stores the team's shared data in a
+//   SQLite-backed Durable Object (available on the Workers Free plan).
 // "name" must match the Worker you connected in the Cloudflare dashboard.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "misty-hill-53e8",
+  "main": "src/index.js",
   "compatibility_date": "2026-10-01",
   "assets": {
     "directory": "./public",
-    "not_found_handling": "single-page-application"
-  }
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "TEAM_STORE", "class_name": "TeamStore" }]
+  },
+  "exports": {
+    "TeamStore": { "type": "durable-object", "storage": "sqlite" }
+  },
+  "observability": { "enabled": true }
 }

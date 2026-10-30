@@ -141,26 +141,147 @@
   }
 
   /* ---------- Storage ---------- */
-  function blank() { return { version: 1, days: {}, forecast: null, model: null, trainedAt: null, trainedOn: null, preds: {} }; }
+  function blank() { return { version: 1, days: {}, forecast: null, model: null, trainedAt: null, trainedOn: null, preds: {}, synced: { days: {}, preds: {}, version: null } }; }
   function load() {
-    try { var d = JSON.parse(localStorage.getItem(KEY)); if (d && d.days) return Object.assign(blank(), d); } catch (e) {}
+    try {
+      var d = JSON.parse(localStorage.getItem(KEY));
+      if (d && d.days) { d = Object.assign(blank(), d); if (!d.synced || !d.synced.days) d.synced = blank().synced; return d; }
+    } catch (e) {}
     return blank();
   }
   var store = load();
   function save() {
     try { localStorage.setItem(KEY, JSON.stringify(store)); }
     catch (e) { toast('Could not save. Browser storage is full or blocked.'); }
+    if (mode === 'shared') scheduleSync();
+  }
+
+  /* ---------- Shared data (Cloudflare Worker API) ----------
+     In shared mode every device keeps a local copy and syncs with the team's
+     single copy on the server. store.synced remembers what the server had at
+     the last sync (as JSON per date), so local edits can be told apart from
+     remote ones: local edits are pushed, remote ones are pulled in. */
+  var mode = 'local';           // 'shared' when the /api backend is available
+  var net = { busy: false, again: false, lastOk: 0, error: null, timer: null };
+  function getToken() { try { return sessionStorage.getItem('rar-token') || localStorage.getItem('rar-predictor/token'); } catch (e) { return null; } }
+  function setToken(t, remember) {
+    try {
+      sessionStorage.setItem('rar-token', t);
+      if (remember) localStorage.setItem('rar-predictor/token', t);
+    } catch (e) {}
+  }
+  function clearToken() { try { sessionStorage.removeItem('rar-token'); localStorage.removeItem('rar-predictor/token'); } catch (e) {} }
+  async function detectMode() {
+    if (location.protocol === 'file:') return 'local';
+    try {
+      var r = await fetch('/api/health', { cache: 'no-store' });
+      if (r.ok && /json/.test(r.headers.get('content-type') || '')) { var j = await r.json(); if (j && j.shared) return 'shared'; }
+    } catch (e) {}
+    return 'local';
+  }
+  function SignedOut() { this.message = 'Signed out'; }
+  async function api(path, body) {
+    var res;
+    try {
+      res = await fetch(path, {
+        method: body ? 'POST' : 'GET', cache: 'no-store',
+        headers: Object.assign({ authorization: 'Bearer ' + (getToken() || '') }, body ? { 'content-type': 'application/json' } : {}),
+        body: body ? JSON.stringify(body) : undefined
+      });
+    } catch (e) { throw new Error('Offline. Changes are saved on this device and will sync when you reconnect.'); }
+    if (res.status === 401) { clearToken(); throw new SignedOut(); }
+    var j = null; try { j = await res.json(); } catch (e) {}
+    if (!res.ok) throw new Error((j && j.error) || 'Server error ' + res.status);
+    return j;
+  }
+  function keysOf() { var o = {}; for (var i = 0; i < arguments.length; i++) Object.keys(arguments[i] || {}).forEach(function (k) { o[k] = 1; }); return Object.keys(o); }
+  function localChanges() {
+    var out = { days: {}, preds: {} }, n = 0;
+    ['days', 'preds'].forEach(function (k) {
+      var local = store[k], synced = store.synced[k];
+      keysOf(local, synced).forEach(function (d) {
+        var cur = local[d] === undefined ? undefined : JSON.stringify(local[d]);
+        if (cur !== synced[d]) { out[k][d] = local[d] === undefined ? null : local[d]; n++; }
+      });
+    });
+    out.n = n;
+    return out;
+  }
+  function mergeRemote(r) {
+    var changed = false;
+    ['days', 'preds'].forEach(function (k) {
+      var local = store[k], synced = store.synced[k], server = r[k] || {};
+      keysOf(local, synced, server).forEach(function (d) {
+        var cur = local[d] === undefined ? undefined : JSON.stringify(local[d]);
+        if (cur !== synced[d]) return;                       // unsent local edit wins; it is pushed next
+        var srv = server[d] === undefined ? undefined : JSON.stringify(server[d]);
+        if (srv === cur) return;
+        if (server[d] === undefined) delete local[d]; else local[d] = server[d];
+        changed = true;
+      });
+      var snap = {};
+      Object.keys(server).forEach(function (d) { snap[d] = JSON.stringify(server[d]); });
+      store.synced[k] = snap;
+    });
+    store.synced.version = r.version;
+    return changed;
+  }
+  var scheduleSync = debounce(function () { syncNow(); }, 400);
+  async function syncNow() {
+    if (mode !== 'shared') return;
+    if (net.busy) { net.again = true; return; }
+    net.busy = true; net.again = false;
+    var pulled = false;
+    try {
+      // 1. Push local edits.
+      var ch = localChanges();
+      if (ch.n) {
+        var all = [];
+        ['days', 'preds'].forEach(function (k) { Object.keys(ch[k]).forEach(function (d) { all.push([k, d, ch[k][d]]); }); });
+        for (var i = 0; i < all.length; i += 1500) {
+          var part = { days: {}, preds: {} };
+          all.slice(i, i + 1500).forEach(function (c) { part[c[0]][c[1]] = c[2]; });
+          var before = store.synced.version;
+          var res = await api('/api/sync', part);
+          all.slice(i, i + 1500).forEach(function (c) {
+            if (c[2] === null) delete store.synced[c[0]][c[1]]; else store.synced[c[0]][c[1]] = JSON.stringify(c[2]);
+          });
+          // Only skip the next full pull if nobody else wrote in between.
+          if (before != null && res.version === before + 1) store.synced.version = res.version; else store.synced.version = null;
+        }
+      }
+      // 2. Pull everyone else's edits.
+      var r = await api('/api/data' + (store.synced.version != null ? '?v=' + store.synced.version : ''));
+      if (!r.unchanged) pulled = mergeRemote(r);
+      net.lastOk = Date.now(); net.error = null;
+      try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) {}
+    } catch (e) {
+      if (e instanceof SignedOut) { net.busy = false; signedOut(); return; }
+      net.error = e.message;
+    }
+    net.busy = false;
+    renderStatus();
+    if (pulled) { renderAll(); maybeRetrain(); if (Object.keys(store.days).some(needsWeather)) sync(); }
+    if (net.again) syncNow();
+  }
+  function signedOut() {
+    renderLock('You were signed out. The password may have changed.');
   }
 
   /* ---------- Lock ---------- */
   function unlocked() {
+    if (mode === 'shared') return !!getToken();
     try { return sessionStorage.getItem('rar-unlocked') === '1' || localStorage.getItem('rar-predictor/unlocked') === '1'; } catch (e) { return false; }
   }
   function lock() {
+    clearToken();
     try { sessionStorage.removeItem('rar-unlocked'); localStorage.removeItem('rar-predictor/unlocked'); } catch (e) {}
     location.reload();
   }
-  function renderLock() {
+  var started = false;
+  function renderLock(message) {
+    if (started) { try { sessionStorage.setItem('rar-msg', message || ''); } catch (e) {} location.reload(); return; }
+    if (!message) { try { message = sessionStorage.getItem('rar-msg') || ''; sessionStorage.removeItem('rar-msg'); } catch (e) {} }
     $('#topActions').innerHTML = themeBtnHtml();
     bindTheme();
     $('#view').innerHTML =
@@ -171,23 +292,37 @@
           '<input class="text-input" id="pw" type="password" placeholder="Password" aria-label="Password" autocomplete="current-password" autofocus>' +
           '<label class="check-label"><input type="checkbox" id="remember">Keep unlocked on this device</label>' +
           '<button class="btn btn-primary btn-lg" type="submit">Unlock</button>' +
-          '<div class="err" id="pwErr" role="alert"></div>' +
+          '<div class="err" id="pwErr" role="alert">' + esc(message || '') + '</div>' +
         '</form></div></div>';
     var form = $('#lockForm'), pw = $('#pw');
     pw.focus();
+    function fail(msg) {
+      $('#pwErr').textContent = msg;
+      var card = $('.lock-card'); card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake');
+      pw.select();
+    }
     form.addEventListener('submit', function (e) {
       e.preventDefault();
+      if (mode === 'shared') {
+        var btn = $('button[type=submit]', form); btn.disabled = true;
+        fetch('/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: pw.value }) })
+          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+          .then(function (x) {
+            btn.disabled = false;
+            if (!x.ok) return fail('Wrong password.');
+            setToken(x.j.token, $('#remember').checked);
+            start();
+          })
+          .catch(function () { btn.disabled = false; fail('Could not reach the server. Check your connection.'); });
+        return;
+      }
       if (pw.value === PASSWORD) {
         try {
           sessionStorage.setItem('rar-unlocked', '1');
           if ($('#remember').checked) localStorage.setItem('rar-predictor/unlocked', '1');
         } catch (err) {}
         start();
-      } else {
-        $('#pwErr').textContent = 'Wrong password.';
-        var card = $('.lock-card'); card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake');
-        pw.select();
-      }
+      } else fail('Wrong password.');
     });
   }
 
@@ -346,6 +481,7 @@
 
   /* ---------- Rendering ---------- */
   function start() {
+    started = true;
     $('#topActions').innerHTML = '<span class="training" id="topStatus"></span>' + themeBtnHtml() +
       '<button class="icon-btn" id="lockBtn" title="Lock" aria-label="Lock">' + icon('lock') + '</button>' +
       '<div class="menu-wrap"><button class="icon-btn" id="moreBtn" aria-label="More options">' + icon('more') + '</button><div class="menu" id="menu" role="menu"></div></div>';
@@ -365,10 +501,12 @@
     $('#view').addEventListener('click', onClick);
     $('#view').addEventListener('change', onChange);
     renderAll();
-    sync();
-    maybeRetrain();
+    if (mode === 'shared') syncNow().then(function () { sync(); maybeRetrain(); });
+    else { sync(); maybeRetrain(); }
     setInterval(function () { if (!document.hidden) sync(); }, FORECAST_TTL);
-    document.addEventListener('visibilitychange', function () { if (!document.hidden) sync(); });
+    if (mode === 'shared') setInterval(function () { if (!document.hidden) syncNow(); }, 30000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) { sync(); if (mode === 'shared') syncNow(); } });
+    window.addEventListener('online', function () { if (mode === 'shared') syncNow(); });
   }
 
   function renderAll() { renderStatus(); renderHero(); renderWeek(); renderModel(); renderData(); }
@@ -377,7 +515,10 @@
     var sub = $('#headSub'); if (!sub) return;
     var f = store.forecast;
     sub.innerHTML = 'Practice 6:00–8:15 PM · ' + esc(S.PLACE.name) + ' · ' +
-      (syncing ? 'updating weather…' : syncError ? '<span style="color:var(--danger)">' + esc(syncError) + '</span>' : f ? 'weather updated ' + ago(f.fetchedAt) : 'weather not loaded yet');
+      (syncing ? 'updating weather…' : syncError ? '<span style="color:var(--danger)">' + esc(syncError) + '</span>' : f ? 'weather updated ' + ago(f.fetchedAt) : 'weather not loaded yet') +
+      '<br>' + (mode === 'shared'
+        ? (net.error ? '<span style="color:var(--warn)">' + esc(net.error) + '</span>' : 'Shared with every device' + (net.lastOk ? ' · synced ' + ago(net.lastOk) : ' · syncing…'))
+        : '<span style="color:var(--warn)">Local mode: data is saved in this browser only</span>');
     var ts = $('#topStatus');
     if (ts) ts.innerHTML = training ? '<span class="spinner"></span>Training <span id="trainPct">' + pct(trainProgress) + '</span>' : '';
   }
@@ -581,8 +722,8 @@
       if (m === 'import') importDialog();
       if (m === 'csv') exportCsv();
       if (m === 'demo') loadDemo();
-      if (m === 'erase') confirmBox('Erase all data?', 'This deletes every logged day and the trained model from this browser. Export a backup first if you might want it back.', 'Erase everything').then(function (ok) {
-        if (!ok) return; store = blank(); save(); renderAll(); toast('All data erased'); sync();
+      if (m === 'erase') confirmBox('Erase all data?', mode === 'shared' ? 'This deletes every logged day for everyone, on every device. Export a backup first if you might want it back.' : 'This deletes every logged day and the trained model from this browser. Export a backup first if you might want it back.', 'Erase everything').then(function (ok) {
+        if (!ok) return; var syn = store.synced; store = blank(); store.synced = syn; save(); renderAll(); toast('All data erased'); sync();
       });
     });
   }
@@ -758,6 +899,9 @@
   /* ---------- Boot ---------- */
   document.addEventListener('DOMContentLoaded', function () {
     $('#brandMark').innerHTML = '<svg viewBox="0 0 24 24">' + ICONS.waves + '</svg>';
-    if (unlocked()) start(); else renderLock();
+    detectMode().then(function (m) {
+      mode = m;
+      if (unlocked()) start(); else renderLock();
+    });
   });
 })();

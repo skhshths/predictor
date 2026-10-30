@@ -1,0 +1,12 @@
+{
+  "name": "rar-predictor",
+  "private": true,
+  "description": "Predicts whether the RAR rowing team practices on the water or on land.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.156.0"
+  }
+}
