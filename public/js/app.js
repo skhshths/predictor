@@ -291,7 +291,7 @@
         '<h1>RAR Predictor</h1><p>Enter the team password to continue.</p>' +
         '<form id="lockForm" autocomplete="off">' +
           '<input class="text-input" id="pw" type="password" placeholder="Password" aria-label="Password" autocomplete="current-password" autofocus>' +
-          '<label class="check-label"><input type="checkbox" id="remember">Keep unlocked on this device</label>' +
+          '<label class="check-label"><input type="checkbox" id="remember">Keep signed in on this device</label>' +
           '<button class="btn btn-primary btn-lg" type="submit">Unlock</button>' +
           '<div class="err" id="pwErr" role="alert">' + esc(message || '') + '</div>' +
         '</form></div></div>';
