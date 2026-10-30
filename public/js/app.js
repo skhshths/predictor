@@ -6,7 +6,7 @@
 (function () {
   'use strict';
 
-  var S = window.Sun, W = window.Weather, L = modelLib();
+  var S = window.Sun, W = window.Weather, C = window.Conditions, L = modelLib();
   var KEY = 'rar-predictor/v1';
   var PASSWORD = 'rar';
   var FORECAST_TTL = 30 * 60 * 1000;
@@ -64,6 +64,7 @@
     download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
     upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>',
     sparkles: '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>',
+    star: '<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>',
     table: '<path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/>'
   };
   function icon(name, style) { return '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"' + (style ? ' style="' + style + '"' : '') + '>' + (ICONS[name] || '') + '</svg>'; }
@@ -489,14 +490,21 @@
     $('#lockBtn').addEventListener('click', lock);
     bindMenu();
     $('#view').innerHTML =
-      '<div class="head"><div><h1>Water or land?</h1><p id="headSub"></p></div>' +
+      '<div class="head"><div><h1 id="headTitle">Water or land?</h1><p id="headSub"></p></div>' +
         '<div class="head-actions"><button class="btn btn-ghost btn-sm" id="refreshBtn">' + icon('refresh') + 'Refresh weather</button>' +
         '<button class="btn btn-soft btn-sm" data-act="add">' + icon('calPlus') + 'Add past days</button></div></div>' +
-      '<div class="grid-2">' +
-        '<div class="stack"><section class="panel hero" id="hero"></section><section class="panel" id="week"></section></div>' +
-        '<section class="panel" id="modelPanel"></section>' +
+      '<div class="seg lg viewseg" id="viewSeg" role="tablist"><button data-v="predict" role="tab">' + icon('cpu') + 'Water or land?</button><button data-v="conditions" role="tab">' + icon('star') + 'Conditions</button></div>' +
+      '<div id="predictView">' +
+        '<div class="grid-2">' +
+          '<div class="stack"><section class="panel hero" id="hero"></section><section class="panel" id="week"></section></div>' +
+          '<section class="panel" id="modelPanel"></section>' +
+        '</div>' +
+        '<section class="panel" id="dataPanel" style="margin-top:12px"></section>' +
       '</div>' +
-      '<section class="panel" id="dataPanel" style="margin-top:12px"></section>';
+      '<div id="condView" hidden></div>';
+    var setView = seg($('#viewSeg'), currentView(), function (v) { location.hash = v === 'conditions' ? '#conditions' : ''; });
+    window.addEventListener('hashchange', function () { setView(currentView()); showView(); });
+    showView();
     $('#refreshBtn').addEventListener('click', function () { sync(true); });
     $('#view').addEventListener('click', onClick);
     $('#view').addEventListener('change', onChange);
@@ -509,7 +517,15 @@
     window.addEventListener('online', function () { if (mode === 'shared') syncNow(); });
   }
 
-  function renderAll() { renderStatus(); renderHero(); renderWeek(); renderModel(); renderData(); }
+  function renderAll() { renderStatus(); renderHero(); renderWeek(); renderModel(); renderData(); renderConditions(); }
+  function currentView() { return location.hash === '#conditions' ? 'conditions' : 'predict'; }
+  function showView() {
+    var c = currentView() === 'conditions';
+    $('#predictView').hidden = c; $('#condView').hidden = !c;
+    $('#headTitle').textContent = c ? 'How will it feel on the water?' : 'Water or land?';
+    document.title = c ? 'Conditions · RAR Predictor' : 'RAR Predictor';
+    renderConditions();
+  }
 
   function renderStatus() {
     var sub = $('#headSub'); if (!sub) return;
@@ -558,7 +574,29 @@
         '<button class="btn btn-water' + (e && e.outcome === 'water' ? ' on' : '') + '" data-log="water">' + icon('waves') + 'On the water</button>' +
         '<button class="btn btn-land' + (e && e.outcome === 'land' ? ' on' : '') + '" data-log="land">' + icon('land') + 'On land</button>' +
         '<button class="btn btn-ghost' + (e && e.outcome === 'none' ? ' on' : '') + '" data-log="none" title="Practice cancelled. Not used for training.">No practice</button>' +
-      '</div>';
+      '</div>' +
+      (e && e.outcome === 'water' ? rateRow(t, e) : '');
+  }
+  // 1–5 rating buttons plus a short note, for a day on the water.
+  function rateRow(d, e, compact) {
+    var btns = [1, 2, 3, 4, 5].map(function (n) {
+      return '<button type="button" data-rate="' + n + '" data-date="' + d + '" aria-pressed="' + (e.rating === n) + '" title="' + n + ': ' + C.LABELS[n] + '" style="--rh:' + RATE_HUE[n] + '">' + n + '</button>';
+    }).join('');
+    return '<div class="rate-row' + (compact ? ' compact' : '') + '">' +
+      (compact ? '' : '<span class="q">How were conditions on the water?</span>') +
+      '<div class="rate" role="group" aria-label="Conditions rating 1 to 5">' + btns + '</div>' +
+      (compact ? '' : '<span class="rate-label">' + (e.rating ? e.rating + ' · ' + C.LABELS[e.rating] : '1 very rough · 5 glassy') + '</span>' +
+        '<input class="text-input sm rate-note" data-rnote="' + d + '" maxlength="140" placeholder="Short note, e.g. chop past the breakwall" value="' + esc(e.ratingNote || '') + '" aria-label="Conditions note">') +
+    '</div>';
+  }
+  var RATE_HUE = { 1: 25, 2: 55, 3: 90, 4: 150, 5: 210 };
+  function stars(r, size) {
+    var out = '';
+    for (var k = 1; k <= 5; k++) {
+      var fill = Math.max(0, Math.min(1, r - k + 1));
+      out += '<span class="st" style="--f:' + (fill * 100).toFixed(0) + '%' + (size ? ';--s:' + size + 'px' : '') + '"></span>';
+    }
+    return '<span class="stars" title="' + r.toFixed(1) + ' out of 5">' + out + '</span>';
   }
   function wx(ic, label, value, sub) {
     return '<div class="wx-item"><div class="l">' + icon(ic) + label + '</div><div class="v">' + value + '</div><div class="s">' + esc(sub) + '</div></div>';
@@ -658,10 +696,11 @@
         '<td>' + (w.dir == null ? '–' : W.compass(w.dir)) + '</td><td class="num">' + (w.daylight == null ? '–' : w.daylight + ' + ' + w.twilight) + '</td>' +
         '<td class="num">' + num(w.cloud) + '%</td><td class="num">' + (w.precip ? num(w.precip, 2) : '0') + (w.thunder ? ' ⚡' : '') + '</td>' +
         '<td>' + held + '</td><td>' + live + '</td>' +
+        '<td title="' + esc(e.ratingNote || '') + '">' + (e.rating ? e.rating + '/5' + (e.ratingNote ? ' ✎' : '') : e.outcome === 'water' ? '<span class="muted">–</span>' : '') + '</td>' +
         '<td style="text-align:right"><button class="icon-btn sm" data-edit aria-label="Edit ' + d + '">' + icon('edit') + '</button><button class="icon-btn sm danger" data-del aria-label="Delete ' + d + '">' + icon('trash') + '</button></td></tr>';
     }).join('');
-    el.innerHTML = head + '<div class="table-wrap"><table class="data"><thead><tr><th title="Use for training">Use</th><th>Date</th><th>Practice</th><th>Temp</th><th>Wind mph</th><th>Gusts</th><th>From</th><th title="Minutes of daylight + twilight during 6:00–8:15 PM">Light min</th><th>Clouds</th><th>Rain in</th><th title="Prediction from a model that did not see this day (cross-validation)">Held-out guess</th><th title="The prediction shown on the day, before practice">Live guess</th><th></th></tr></thead><tbody>' +
-      (rows || '<tr><td colspan="13" class="muted" style="text-align:center;padding:20px">No days match this filter.</td></tr>') + '</tbody></table></div>' +
+    el.innerHTML = head + '<div class="table-wrap"><table class="data"><thead><tr><th title="Use for training">Use</th><th>Date</th><th>Practice</th><th>Temp</th><th>Wind mph</th><th>Gusts</th><th>From</th><th title="Minutes of daylight + twilight during 6:00–8:15 PM">Light min</th><th>Clouds</th><th>Rain in</th><th title="Prediction from a model that did not see this day (cross-validation)">Held-out guess</th><th title="The prediction shown on the day, before practice">Live guess</th><th title="Conditions on the water, 1–5">Cond.</th><th></th></tr></thead><tbody>' +
+      (rows || '<tr><td colspan="14" class="muted" style="text-align:center;padding:20px">No days match this filter.</td></tr>') + '</tbody></table></div>' +
       '<div class="panel-foot">Uncheck <b style="color:var(--text-2)">Use</b> to leave a day out of training without deleting it. Weather is for 6–8 PM; light is minutes of daylight + twilight between 6:00 and 8:15 PM.</div>';
     bindFilter();
   }
@@ -671,8 +710,105 @@
   }
   function bindFilter() { var s = $('#filterSeg'); if (s) seg(s, filter, function (v) { filter = v; renderData(); }); }
 
+  /* ---------- Conditions view ---------- */
+  function renderConditions() {
+    var el = $('#condView'); if (!el || el.hidden) return;
+    var t = S.todayKey(), w = weatherFor(t), e = store.days[t];
+    var waterDays = Object.keys(store.days).filter(function (d) { return store.days[d].outcome === 'water'; }).sort().reverse();
+    var ratedN = waterDays.filter(function (d) { return store.days[d].rating; }).length;
+    var html = '<div class="grid-2">';
+
+    // Today: most similar day, or a generated "what it might feel like".
+    html += '<section class="panel hero" style="--verdict:var(--water)">';
+    if (!w) {
+      html += '<div class="panel-body"><h3 style="margin:0 0 6px">Waiting for today’s forecast</h3><p class="muted" style="margin:0">' + (syncError ? esc(syncError) : 'Loading 6–8 PM weather for Milton Harbor…') + '</p></div>';
+    } else {
+      var matches = C.similarDays(w, store.days, t), best = matches[0], exp = C.expected(w, store.days, t);
+      var matched = best && best.sim >= C.MATCH;
+      html += '<div class="hero-body"><div>' +
+        '<div class="hero-date">' + fmtDate(t) + ' · Today on the water, 6–8 PM</div>' +
+        '<div class="verdict"><span class="verdict-icon" style="--verdict:oklch(var(--al) var(--ac) ' + RATE_HUE[Math.round(exp.rating)] + ')">' + icon('waves') + '</span>' +
+          '<div><h2>' + exp.rating.toFixed(1) + '<span class="muted" style="font-size:18px;font-weight:500"> / 5</span></h2>' + stars(exp.rating, 16) + '</div></div>' +
+        '<p class="verdict-sub">Expected: <b>' + C.LABELS[Math.round(exp.rating)] + '</b> · ' +
+          (exp.basis === 'similar' ? 'based on ' + exp.used + ' similar rated day' + (exp.used === 1 ? '' : 's')
+            : exp.basis === 'blend' ? 'similar rated days blended with a weather estimate'
+            : 'estimated from the weather (rate more days to improve this)') + '</p>' +
+        '</div></div>';
+      if (matched) {
+        var be = best.entry;
+        html += '<div class="match"><div class="match-head"><span class="badge water">' + Math.round(best.sim * 100) + '% similar</span><b>Most similar day: ' + fmtDate(best.date) + '</b>' +
+          (be.rating ? '<span class="badge" style="margin-left:auto">' + stars(be.rating, 12) + ' ' + be.rating + ' · ' + C.LABELS[be.rating] + '</span>' : '<span class="badge warn" style="margin-left:auto">not rated yet</span>') + '</div>' +
+          (be.ratingNote ? '<blockquote class="quote">“' + esc(be.ratingNote) + '”</blockquote>' : '') +
+          compare(w, be.weather) + '</div>';
+      } else {
+        html += '<div class="match"><div class="match-head"><b>' + icon('sparkles') + ' What it might feel like</b><span class="muted" style="margin-left:auto;font-size:12.5px">' +
+          (best ? 'No close match (closest: ' + fmtDate(best.date) + ', ' + Math.round(best.sim * 100) + '% similar)' : 'No water days logged yet to compare') + '</span></div>' +
+          '<ul class="feel">' + C.describe(w, t).map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ul>' +
+          '<p class="muted" style="font-size:12px;margin:8px 0 0">Generated from the forecast. A real similar day replaces this once one is logged.</p></div>';
+      }
+      var others = matches.slice(matched ? 1 : 0, (matched ? 1 : 0) + 3).filter(function (m) { return m.sim >= 0.4; });
+      if (others.length) html += '<div class="others"><span class="section-label" style="margin:0">Also similar</span>' + others.map(function (m) {
+        return '<span class="chip-day" title="' + esc(m.entry.ratingNote || '') + '">' + fmtDate(m.date) + ' · ' + Math.round(m.sim * 100) + '%' + (m.entry.rating ? ' · ' + m.entry.rating + '/5' : '') + '</span>';
+      }).join('') + '</div>';
+      if (e && e.outcome === 'water') html += rateRow(t, e);
+      else if (!e) html += '<div class="log-row"><span class="q">Went out today?</span><button class="btn btn-water" data-log="water">' + icon('waves') + 'On the water</button><button class="btn btn-land" data-log="land">' + icon('land') + 'On land</button></div>';
+    }
+    html += '</section>';
+
+    // Upcoming days.
+    var up = '';
+    for (var k = 1; k <= 7; k++) {
+      var d = S.addDays(t, k), fw = store.forecast && store.forecast.days[d];
+      if (!fw) continue;
+      var ex = C.expected(fw, store.days), m = C.similarDays(fw, store.days)[0];
+      up += '<li><span class="ud">' + (k === 1 ? 'Tomorrow' : fmtDate(d)) + '</span>' + stars(ex.rating, 12) + '<b>' + ex.rating.toFixed(1) + '</b>' +
+        '<span class="um">' + (m && m.sim >= C.MATCH ? 'like ' + fmtDate(m.date) + ' (' + Math.round(m.sim * 100) + '%)' : num(fw.windAvg) + ' mph ' + W.compass(fw.dir) + ', ' + num(fw.tempAvg) + '°F') + '</span></li>';
+    }
+    html += '<section class="panel"><div class="panel-head"><span class="panel-title">Next 7 days <span class="muted">· expected conditions</span></span></div><div class="panel-body"><ul class="upcoming">' + (up || '<li class="muted">Forecast not loaded yet.</li>') + '</ul>' +
+      '<p class="note" style="margin-top:12px">Ratings: <b>1</b> very rough · <b>2</b> rough · <b>3</b> OK · <b>4</b> good · <b>5</b> glassy. ' + ratedN + ' of ' + waterDays.length + ' water days rated so far.</p></div></section>';
+    html += '</div>';
+
+    // Every water day, with inline rating and note.
+    html += '<section class="panel" style="margin-top:12px"><div class="panel-head"><span class="panel-title">' + icon('star') + 'Water days <span class="muted">· rate each one 1–5 with a short note</span></span>' +
+      '<div class="panel-actions"><button class="btn btn-soft btn-sm" data-act="add">' + icon('plus') + 'Add days</button></div></div>';
+    if (!waterDays.length) html += '<div class="empty"><h3>No water days yet</h3><p>Log a practice as “On the water”, then rate how it was. Similar-day matching gets better with every rated day.</p></div>';
+    else html += '<div class="table-wrap"><table class="data cond"><thead><tr><th>Date</th><th>Rating</th><th>Note</th><th>Wind</th><th>Gusts</th><th>From</th><th>Temp</th><th>Light</th>' + (w ? '<th title="How similar this day was to today">Like today</th>' : '') + '</tr></thead><tbody>' +
+      waterDays.map(function (d) {
+        var en = store.days[d], ww = en.weather || {};
+        return '<tr data-date="' + d + '"><td>' + fmtDate(d) + '</td><td>' + rateRow(d, en, true) + '</td>' +
+          '<td><input class="text-input sm" data-rnote="' + d + '" maxlength="140" value="' + esc(en.ratingNote || '') + '" placeholder="Add a note" style="min-width:200px" aria-label="Note for ' + d + '"></td>' +
+          '<td class="num">' + num(ww.windAvg) + '</td><td class="num">' + num(ww.gustMax) + '</td><td>' + (ww.dir == null ? '–' : W.compass(ww.dir)) + '</td><td class="num">' + num(ww.tempAvg) + '°</td>' +
+          '<td class="num">' + (ww.daylight == null ? '–' : ww.daylight + ' + ' + ww.twilight) + '</td>' +
+          (w ? '<td class="num">' + (en.weather && en.weather.windAvg != null ? Math.round(C.similarity(w, en.weather) * 100) + '%' : '–') + '</td>' : '') + '</tr>';
+      }).join('') + '</tbody></table></div>';
+    html += '</section>';
+    el.innerHTML = html;
+  }
+  function compare(a, b) {
+    function row(label, x, y) { return '<tr><td>' + label + '</td><td>' + x + '</td><td>' + y + '</td></tr>'; }
+    function sky(w) { return w.thunder ? 'Storms' : (w.precip ? num(w.precip, 2) + ' in rain' : num(w.cloud) + '% cloud'); }
+    var La = a.daylight + a.twilight, Lb = b.daylight + b.twilight;
+    return '<table class="cmp"><thead><tr><th></th><th>Today</th><th>That day</th></tr></thead><tbody>' +
+      row('Wind', num(a.windAvg) + ' mph', num(b.windAvg) + ' mph') +
+      row('Gusts', num(a.gustMax) + ' mph', num(b.gustMax) + ' mph') +
+      row('From', W.compass(a.dir), W.compass(b.dir)) +
+      row('Temp', num(a.tempAvg) + '°F', num(b.tempAvg) + '°F') +
+      row('Light', isNaN(La) ? '–' : La + ' min', isNaN(Lb) ? '–' : Lb + ' min') +
+      row('Sky', sky(a), sky(b)) +
+      '</tbody></table>';
+  }
+
   /* ---------- Events ---------- */
   function onClick(e) {
+    var rt = e.target.closest('[data-rate]');
+    if (rt) {
+      var rd = rt.dataset.date, en = store.days[rd]; if (!en) return;
+      var val = +rt.dataset.rate;
+      en.rating = en.rating === val ? null : val;
+      save(); renderAll();
+      if (en.rating) toast('Rated ' + fmtDate(rd) + ': ' + en.rating + ' · ' + C.LABELS[en.rating]);
+      return;
+    }
     var lg = e.target.closest('[data-log]');
     if (lg) { logOutcome(S.todayKey(), lg.dataset.log); return; }
     var a = e.target.closest('[data-act]');
@@ -698,6 +834,11 @@
     }
   }
   function onChange(e) {
+    if (e.target.matches('[data-rnote]')) {
+      var nd = e.target.dataset.rnote;
+      if (store.days[nd]) { store.days[nd].ratingNote = e.target.value.trim(); save(); toast('Note saved'); }
+      return;
+    }
     if (e.target.matches('[data-include]')) {
       var d = e.target.closest('tr').dataset.date;
       store.days[d].include = e.target.checked;
@@ -729,12 +870,12 @@
   }
 
   function exportCsv() {
-    var cols = ['date', 'outcome', 'used_for_training', 'temp_avg_f', 'temp_min_f', 'wind_avg_mph', 'gust_max_mph', 'wind_dir_deg', 'wind_from', 'daylight_min', 'twilight_min', 'cloud_pct', 'rain_in', 'thunder', 'weather_source', 'live_prediction_water_pct', 'heldout_prediction_water_pct', 'note'];
+    var cols = ['date', 'outcome', 'used_for_training', 'temp_avg_f', 'temp_min_f', 'wind_avg_mph', 'gust_max_mph', 'wind_dir_deg', 'wind_from', 'daylight_min', 'twilight_min', 'cloud_pct', 'rain_in', 'thunder', 'weather_source', 'live_prediction_water_pct', 'heldout_prediction_water_pct', 'conditions_rating', 'conditions_note', 'note'];
     var oof = store.model && store.model.ready ? store.model.oof : {};
     var lines = [cols.join(',')].concat(Object.keys(store.days).sort().map(function (d) {
       var e = store.days[d], w = e.weather || {};
       return [d, e.outcome, e.include !== false && e.outcome !== 'none', w.tempAvg, w.tempMin, w.windAvg, w.gustMax, w.dir, w.dir == null ? '' : W.compass(w.dir), w.daylight, w.twilight, w.cloud, w.precip, w.thunder, w.source,
-        e.prediction ? Math.round(e.prediction.p * 100) : '', oof[d] != null ? Math.round(oof[d] * 100) : '', e.note || '']
+        e.prediction ? Math.round(e.prediction.p * 100) : '', oof[d] != null ? Math.round(oof[d] * 100) : '', e.rating || '', e.ratingNote || '', e.note || '']
         .map(function (v) { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(',');
     }));
     download('rar-practice-data-' + S.todayKey() + '.csv', lines.join('\n') + '\n', 'text/csv');
@@ -834,6 +975,8 @@
     var body = h('<div>' +
       '<div class="form-row"><span class="form-label">Practice</span><div class="seg" id="eo"><button data-v="water">On the water</button><button data-v="land">On land</button><button data-v="none">No practice</button></div></div>' +
       '<div class="form-row"><label class="check-label"><input type="checkbox" id="einc"' + (e.include === false ? '' : ' checked') + '>Use this day for training</label></div>' +
+      '<div class="form-row" id="erateRow"><span class="form-label">Conditions on the water</span><div class="seg" id="erate"><button data-v="0">Not rated</button>' + [1, 2, 3, 4, 5].map(function (k) { return '<button data-v="' + k + '" title="' + C.LABELS[k] + '">' + k + '</button>'; }).join('') + '</div>' +
+        '<input class="text-input sm" id="ernote" maxlength="140" style="margin-top:8px" placeholder="Short note about the water" value="' + esc(e.ratingNote || '') + '"></div>' +
       '<div class="section-label" style="margin:18px 0 8px;display:flex;justify-content:space-between;align-items:center">Weather, 6–8 PM <button type="button" class="btn btn-ghost btn-sm" id="refetch">' + icon('refresh') + 'Re-fetch</button></div>' +
       '<div class="form-grid">' + FIELDS.map(function (f) {
         return '<div><label class="form-label" for="f-' + f[0] + '">' + f[1] + '</label><input class="text-input sm" type="number" step="any" id="f-' + f[0] + '" value="' + (w[f[0]] == null ? '' : w[f[0]]) + '"></div>';
@@ -842,8 +985,11 @@
       '<p class="muted" style="font-size:12.5px;margin:10px 0 0">Light (calculated): ' + L2.daylight + ' min daylight + ' + L2.twilight + ' min twilight during 6:00–8:15 PM' + (L2.sunset ? ' · sunset ' + L2.sunset : '') + '. Source: ' + (w.source === 'manual' ? 'entered by hand' : w.source ? 'Open-Meteo' + (w.provisional ? ' (forecast)' : '') : 'none yet') + '.</p>' +
       '<div class="form-row"><label class="form-label" for="enote">Note</label><textarea class="text-area" id="enote" rows="2" placeholder="e.g. lightning nearby, coach call">' + esc(e.note || '') + '</textarea></div>' +
       '</div>');
-    var outcome = e.outcome;
-    seg($('#eo', body), outcome, function (v) { outcome = v; });
+    var outcome = e.outcome, rating = e.rating || 0;
+    function showRate() { $('#erateRow', body).hidden = outcome !== 'water'; }
+    seg($('#eo', body), outcome, function (v) { outcome = v; showRate(); });
+    seg($('#erate', body), String(rating), function (v) { rating = +v; });
+    showRate();
     var edited = false;
     $$('.form-grid input', body).forEach(function (i) { i.addEventListener('input', function () { edited = true; }); });
     $('#refetch', body).addEventListener('click', function (ev) {
@@ -869,6 +1015,7 @@
         nw.daylight = L2.daylight; nw.twilight = L2.twilight; nw.sunset = L2.sunset;
         if (edited || nw.thunder !== (w.thunder ? 1 : 0)) { nw.source = 'manual'; nw.provisional = false; }
         e.outcome = outcome; e.include = $('#einc', body).checked; e.note = $('#enote', body).value.trim();
+        e.rating = outcome === 'water' && rating ? rating : null; e.ratingNote = $('#ernote', body).value.trim();
         e.weather = nw.tempAvg == null && nw.windAvg == null && !e.weather ? null : nw;
         store.days[d] = e; save(); renderAll(); retrainSoon();
         toast('Saved ' + fmtDate(d));

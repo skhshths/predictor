@@ -4,9 +4,12 @@ A password-locked web app that predicts whether the **RowAmerica Rye (RAR)** tea
 
 You log what actually happened each day. The app collects that day's weather by itself, retrains its AI model on your history, and shows each prediction with an **accuracy** and a **certainty**.
 
-- **Password:** `rar` (lowercase). See [Security](#security) for what this lock does and doesn't protect.
+A second view, **Conditions**, lets you rate how it was on the water from 1 to 5, with a short note. Each day it finds the logged day most similar to today. If nothing is close enough, it describes what today might feel like.
+
+- **Shared:** every device sees the same data, kept on the server (a Cloudflare Worker with a Durable Object).
+- **Password:** `rar` (lowercase), checked on the server. See [Security](#security).
 - **Location:** the Rye City Boat Basin at 668 Milton Road, home of the RAR boathouse, at 40.9578° N, 73.6897° W.
-- **No accounts, no server, no build step.** Everything runs in the browser.
+- **No accounts and no build step.** The model trains in the browser. The server only stores the shared data.
 
 ---
 
@@ -18,6 +21,7 @@ You log what actually happened each day. The app collects that day's weather by 
 - [Accuracy and certainty](#accuracy-and-certainty)
 - [How the AI model works](#how-the-ai-model-works)
 - [Managing training data](#managing-training-data)
+- [Conditions: ratings and similar days](#conditions-ratings-and-similar-days)
 - [Weather data and location](#weather-data-and-location)
 - [Deploying on Cloudflare](#deploying-on-cloudflare)
 - [Other hosting](#other-hosting)
@@ -41,7 +45,17 @@ cd predictor/public && python3 -m http.server 8000
 
 Then open http://localhost:8000 and enter the password `rar`.
 
-Opening `public/index.html` directly also works in most browsers. A local server avoids browser restrictions on `file://` pages.
+That runs the site in **local mode**: data is kept in that browser only, and the status line says so. To run the full app with shared data locally, use the Worker:
+
+```bash
+npm install
+```
+
+```bash
+npx wrangler dev
+```
+
+Then open http://localhost:8787. It uses a local copy of the Durable Object, separate from your live data.
 
 **First run:**
 1. Use **Add past days** to backfill recent practices. Pick a date range and mark each day **Water**, **Land**, **None** (no practice) or **Skip**. You can mark days one by one or with **Set all to**, and **Skip weekends** helps if you don't practice then. The weather for every day is fetched automatically.
@@ -53,7 +67,7 @@ Opening `public/index.html` directly also works in most browsers. A local server
 ## Daily use
 
 1. Open the app. It refreshes the forecast for today's 6–8 PM window and for the next 7 days, and shows the prediction.
-2. After practice, tap **On the water**, **On land** or **No practice** on the main card.
+2. After practice, tap **On the water**, **On land** or **No practice** on the main card. On water days, also tap a **1–5 rating** for how it was and add a short note.
 3. That's it. The app does the rest:
    - stores today's weather with your answer
    - replaces the forecast with the observed weather the next time you open it (forecast days show a `~` until then)
@@ -141,6 +155,52 @@ Actions:
 
 ---
 
+## Conditions: ratings and similar days
+
+Switch with the **Water or land? | Conditions** tabs, or go straight to `/#conditions`. Both views share the same password and data.
+
+**Rating a day:** after logging a day as **On the water**, tap **1–5** and add a short note (up to 140 characters).
+
+| Rating | Meaning |
+| --- | --- |
+| 1 | Very rough |
+| 2 | Rough |
+| 3 | OK |
+| 4 | Good |
+| 5 | Glassy |
+
+You can rate in three places:
+- on today's card in either view
+- in the **Water days** table on the Conditions view, which has inline buttons and a note box for every water day
+- in the edit dialog for any day
+
+Tapping the same number again clears the rating. Ratings and notes sync to every device.
+
+**Today's card shows:**
+- **Expected conditions:** a 1–5 estimate. It's a similarity-weighted average of the 7 most similar *rated* water days, blended with a weather-only estimate when there are few close matches. The card says which it used.
+- **Most similar day:** when a past water day is at least 65% similar, you see its date, how similar it is, its rating and note, and a side-by-side comparison with today (wind, gusts, direction, temperature, light, sky).
+- **What it might feel like:** when nothing is similar enough, the app writes a description from the forecast instead. It covers:
+  - how the water surface should look at that wind speed
+  - how the wind meets Milton Harbor: southerly winds blow up the harbor off Long Island Sound and build waves, northerly winds are offshore and calmer near the boathouse, and others are crosswinds
+  - gusts, temperature, how much light is left, and rain or storms
+
+  This is replaced by a real similar day once one exists.
+- **Also similar:** up to 3 more close days.
+
+**Next 7 days** shows the expected rating for each forecast day and the closest past day it resembles.
+
+**How similarity works:** two days are compared on the 6–8 PM weather. Each feature is put on a natural scale (5 mph of wind ≈ 7 mph of gusts ≈ 10°F ≈ 40 minutes of light) and weighted by how much it matters on the water:
+- wind ×3
+- gusts ×2
+- wind direction ×1.5 for each of its two components
+- rain ×1.5, thunder ×2
+- temperature ×1, light ×1
+- clouds ×0.4
+
+The result is turned into a 0–100% similarity. Only days on the water are candidates, since land days have no on-water conditions.
+
+---
+
 ## Weather data and location
 
 - **Source:** [Open-Meteo](https://open-meteo.com/), which is free, needs no API key, and allows browser requests.
@@ -166,6 +226,8 @@ This repo includes `wrangler.jsonc`, which deploys `public/` as a static-assets 
 
 The `"name"` in `wrangler.jsonc` must match the Worker's name in the dashboard. It's currently `misty-hill-53e8`; change it if you rename or recreate the Worker.
 
+**Shared data:** `wrangler.jsonc` declares the Worker script (`src/index.js`) and a SQLite-backed Durable Object class (`TeamStore`) using the `exports` field. Cloudflare creates the storage automatically on the first deploy. Durable Objects with SQLite storage are included on the **Workers Free** plan. `/api/*` requests run the Worker first; everything else is served straight from `public/`.
+
 **"Missing git connection" or "internal error" when connecting:**
 
 | Cause | Fix |
@@ -188,25 +250,33 @@ Any static host works; point it at the `public/` folder.
 
 ## Data, backups and privacy
 
-- All data lives in your browser's `localStorage` under `rar-predictor/v1`. **Different browsers and devices don't share data.** Use **⋯ → Export backup** and **Import backup** to move or share it. Import can **Merge** (adds days, and the backup wins on clashes) or **Replace**.
+- **Shared data:** when the site runs on the Cloudflare Worker, every logged day is stored once, on the server, in a SQLite-backed Durable Object. That includes outcomes, weather, inclusion, ratings, notes and pre-practice predictions.
+- **Each device keeps a local copy** so the app works instantly and offline. It sends its edits and fetches everyone else's:
+  - within a second of a change
+  - every 30 seconds
+  - when you return to the tab
+  - when the connection comes back
+
+  The status line under the title shows *Shared with every device · synced …*.
+- **Edits on different days by different people merge.** If two devices change the *same* day before syncing, the last one to sync wins.
+- **Offline edits** are kept on the device (they survive reloads) and are sent when you reconnect. The first time a device signs in, any days it already had saved locally are added to the shared data.
+- **Per device:** the trained model and the cached forecast are kept separately on each device. Every device trains on the same shared data and gets the same model.
+- **Without the Worker** (`file://`, `python3 -m http.server`, GitHub Pages), the app runs in **local mode**, with data in that browser only, and says so in the status line.
+- **⋯ → Export backup** and **Import backup** still work. Import can **Merge** (adds days, and the backup wins on clashes) or **Replace**. In shared mode, either one changes the data for everyone.
 - **⋯ → Export data as CSV** gives a spreadsheet of every day: weather, outcome, and the live and held-out predictions.
-- **⋯ → Erase all data** deletes everything from this browser.
-- The only network requests are to Open-Meteo (for weather) and Google Fonts. Nothing about your team is sent anywhere.
+- **⋯ → Erase all data** deletes everything. In shared mode it erases the data **for every device**, after asking you to confirm.
+- The only network requests are to your own Worker (for the shared data), Open-Meteo (for weather) and Google Fonts. Nothing about your team is sent anywhere else.
 
 ---
 
 ## Security
 
-The password screen keeps casual visitors out, but it is **not real security**. Here's why:
-- The site is static, so the check runs in the browser, and anyone who reads the page source can find or bypass it.
-- The data itself is stored in the viewer's own browser, so there is no shared team data on the server to steal.
-
-If you need real access control, put the site behind **Cloudflare Access** (Zero Trust): add an Access application for the Worker's URL with an email or one-time-PIN policy. This requires no code changes.
-
-- **Keep unlocked on this device** remembers the unlock in `localStorage`.
-- Otherwise the unlock lasts until the tab is closed.
-- The 🔒 button in the top bar locks again.
-- The page also asks search engines not to index it (`noindex`).
+- **Server-side check:** the password is checked by the Worker, not the page. Signing in sends it to `/api/login`, which returns a signed token, and every data request must carry that token. Without the password, nobody can read or change the team's data, even with the page's code.
+- **Default password:** `rar`. To change it without editing code, add a secret named `APP_PASSWORD`: Cloudflare dashboard → **Workers & Pages → misty-hill-53e8 → Settings → Variables and Secrets → Add → Type: Secret**. Changing it signs everyone out on their next sync.
+- **Staying signed in:** **Keep signed in on this device** keeps the token after the browser closes. Otherwise it lasts until the tab is closed. The 🔒 button signs out.
+- **Brute force:** failed sign-ins are slowed down to make guessing harder. A three-letter password is still easy to guess, though, so use a longer `APP_PASSWORD` if the data matters.
+- **Public page:** the static page itself (HTML, CSS, JS) is public; only the data is protected. To hide the whole site, put it behind **Cloudflare Access** (Zero Trust) with an email or one-time-PIN policy. This needs no code changes.
+- **Search engines:** `robots.txt` and a `noindex` tag keep the site out of search results.
 
 ---
 
@@ -214,7 +284,10 @@ If you need real access control, put the site behind **Cloudflare Access** (Zero
 
 ```
 predictor/
-├── wrangler.jsonc        Cloudflare Workers config (static assets from ./public)
+├── wrangler.jsonc        Cloudflare config: static assets, Worker script, Durable Object
+├── package.json          Pins Wrangler (npm run dev / npm run deploy)
+├── src/
+│   └── index.js          Worker API: login, shared data (TeamStore Durable Object, SQLite)
 ├── README.md
 └── public/
     ├── index.html        Page shell, theme bootstrap, script tags
@@ -224,7 +297,8 @@ predictor/
         ├── weather.js    Open-Meteo fetching (forecast + archive) → 6–8 PM features
         ├── model.js      Features, logistic regression, neural network, cross-validation,
         │                 model selection, importance, starter rules (also runs in a Web Worker)
-        └── app.js        Lock screen, storage, weather sync, training, predictions, UI
+        ├── conditions.js Ratings, similar-day matching, expected rating, "might feel like" text
+        └── app.js        Lock screen, shared-data sync, weather sync, training, both views
 ```
 
 ---
@@ -233,7 +307,9 @@ predictor/
 
 | What | Where |
 | --- | --- |
-| Password | `PASSWORD` in `public/js/app.js` |
+| Password | The `APP_PASSWORD` secret in Cloudflare (default `rar` in `src/index.js`; local mode uses `PASSWORD` in `public/js/app.js`) |
+| How similar days are compared | `FEATS` (scales and weights) and `MATCH` (the 65% threshold) in `public/js/conditions.js` |
+| How fast devices sync | the `30000` ms interval in `start()` in `public/js/app.js` |
 | Location | `PLACE` in `public/js/sun.js` (lat, lon, elevation, time zone) |
 | Practice window for light | `PRACTICE` in `public/js/sun.js` |
 | Hours used for weather | `PRACTICE_HOURS` in `public/js/weather.js` |
@@ -250,6 +326,9 @@ predictor/
 | --- | --- |
 | "Could not reach the weather service" | Check your connection and click **Refresh weather**. You can still log days, and weather fills in on the next successful refresh. |
 | A day shows `no weather` | It may be too far in the past or future for the service. Edit the day and enter the values by hand, or click **Re-fetch**. |
-| Data disappeared | You're probably in a different browser, a private window, or on a different site address. Import your latest backup. |
+| "Local mode: data is saved in this browser only" | The page isn't being served by the Worker (for example, a local file or a plain static host). Open the Worker's URL instead. |
+| "You were signed out" | The password (`APP_PASSWORD`) changed, or the token was cleared. Sign in again. |
+| A change hasn't appeared on another device | Wait up to 30 seconds, or switch away from the tab and back. Check the status line for an offline message. |
+| Data disappeared | In local mode, you're probably in a different browser or a private window. In shared mode, check whether someone erased or replaced it. Import your latest backup. |
 | Accuracy isn't better than the baseline | Log more days, especially varied ones (windy days on the water, calm days on land). Exclude days where the decision wasn't about the weather, such as erg tests or regatta travel. |
 | Cloudflare build fails with a name mismatch | Make `"name"` in `wrangler.jsonc` match your Worker's name. |
