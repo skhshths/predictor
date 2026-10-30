@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RAR Predictor</title>
+<meta name="description" content="Predicts whether the RAR rowing team will practice on the water or on land, from 6–8 PM weather and light at the Milton Harbor boathouse in Rye, NY.">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#f7f7f5">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%2318181b'/%3E%3Cpath d='M6 13c2.5-2 5-2 7.5 0s5 2 7.5 0 3.5-1.5 5-1M6 19c2.5-2 5-2 7.5 0s5 2 7.5 0 3.5-1.5 5-1' fill='none' stroke='%23fff' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+  (function () {
+    var t = null;
+    try { t = localStorage.getItem('rar-predictor/theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    document.documentElement.dataset.theme = t;
+  })();
+</script>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="top">
+      <div class="brand"><span class="brand-mark" id="brandMark"></span><span>RAR Predictor <small>Water or land?</small></span></div>
+      <div class="top-actions" id="topActions"></div>
+    </header>
+    <main id="view"></main>
+  </div>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <noscript><p style="text-align:center;padding:40px">This app needs JavaScript.</p></noscript>
+  <script src="js/sun.js"></script>
+  <script src="js/weather.js"></script>
+  <script src="js/model.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
