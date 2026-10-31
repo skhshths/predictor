@@ -10,7 +10,15 @@
   // RowAmerica Rye (RAR) boathouse at the Rye City Boat Basin, 668 Milton Road, on Milton Harbor.
   // Coordinates of the basin (Waterway Guide: N 40° 57.470', W 073° 41.379').
   var PLACE = { name: 'RAR boathouse, Milton Harbor, Rye NY', short: 'Milton Harbor, Rye', lat: 40.9578, lon: -73.6897, elevation: 2, tz: 'America/New_York' };
-  var PRACTICE = { start: [18, 0], end: [20, 15] }; // 6:00–8:15 PM
+  // Practice times: Saturdays 10:00 AM–12:15 PM, every other day 6:00–8:15 PM.
+  // `hours` are the whole hours whose weather describes the practice.
+  var SCHEDULE = {
+    evening: { id: 'pm', start: [18, 0], end: [20, 15], hours: [18, 19, 20], label: '6:00–8:15 PM', short: '6–8 PM' },
+    saturday: { id: 'sat', start: [10, 0], end: [12, 15], hours: [10, 11, 12], label: '10:00 AM–12:15 PM', short: '10 AM–12 PM' }
+  };
+  var PRACTICE = SCHEDULE.evening;
+  function weekday(key) { var p = key.split('-'); return new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])).getUTCDay(); }
+  function practice(key) { return weekday(key) === 6 ? SCHEDULE.saturday : SCHEDULE.evening; }
 
   var dtf = new Intl.DateTimeFormat('en-US', {
     timeZone: PLACE.tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
@@ -68,12 +76,13 @@
   }
 
   // Minutes of daylight (sun above the horizon) and civil twilight (sun 0–6° below)
-  // inside the 6:00–8:15 PM practice window, plus sunset and dusk times.
+  // inside that day's practice window, plus sunset and dusk times.
   var cache = {};
   function light(dateKey) {
     if (cache[dateKey]) return cache[dateKey];
-    var start = zoned(dateKey, PRACTICE.start[0], PRACTICE.start[1]);
-    var end = zoned(dateKey, PRACTICE.end[0], PRACTICE.end[1]);
+    var P = practice(dateKey);
+    var start = zoned(dateKey, P.start[0], P.start[1]);
+    var end = zoned(dateKey, P.end[0], P.end[1]);
     var mins = Math.round((end - start) / 60000), day = 0, twi = 0;
     for (var k = 0; k < mins; k++) {
       var a = altitude(start + (k + 0.5) * 60000, PLACE.lat, PLACE.lon);
@@ -93,5 +102,5 @@
     return out;
   }
 
-  window.Sun = { PLACE: PLACE, PRACTICE: PRACTICE, light: light, altitude: altitude, zoned: zoned, todayKey: todayKey, nowMinutes: nowMinutes, addDays: addDays, fmtClock: fmtClock };
+  window.Sun = { PLACE: PLACE, PRACTICE: PRACTICE, SCHEDULE: SCHEDULE, practice: practice, weekday: weekday, light: light, altitude: altitude, zoned: zoned, todayKey: todayKey, nowMinutes: nowMinutes, addDays: addDays, fmtClock: fmtClock };
 })();

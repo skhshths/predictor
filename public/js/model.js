@@ -13,7 +13,7 @@ function modelLib() {
   'use strict';
 
   var FEATURES = [
-    { key: 'tempAvg', label: 'Temperature, 6–8 PM' },
+    { key: 'tempAvg', label: 'Temperature during practice' },
     { key: 'windAvg', label: 'Wind speed' },
     { key: 'gustMax', label: 'Wind gusts' },
     { key: 'windN', label: 'Wind from north vs south' },
@@ -22,7 +22,8 @@ function modelLib() {
     { key: 'twilight', label: 'Twilight during practice' },
     { key: 'cloud', label: 'Cloud cover' },
     { key: 'precip', label: 'Rain' },
-    { key: 'thunder', label: 'Thunderstorms' }
+    { key: 'thunder', label: 'Thunderstorms' },
+    { key: 'morning', label: 'Saturday morning practice' }
   ];
   var MIN_DAYS = 6, MIN_EACH = 2;
 
@@ -46,7 +47,8 @@ function modelLib() {
       num(w.tempAvg), s, num(w.gustMax),
       ok ? s * Math.cos(d) : (s === 0 ? 0 : NaN), ok ? s * Math.sin(d) : (s === 0 ? 0 : NaN),
       num(w.daylight), num(w.twilight), num(w.cloud), num(w.precip),
-      w.thunder == null || w.thunder === '' ? NaN : (+w.thunder ? 1 : 0)
+      w.thunder == null || w.thunder === '' ? NaN : (+w.thunder ? 1 : 0),
+      w.window ? (w.window === 'sat' ? 1 : 0) : NaN
     ];
   }
 

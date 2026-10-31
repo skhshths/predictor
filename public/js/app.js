@@ -348,7 +348,8 @@
   function predictFor(w) {
     if (!w || w.tempAvg == null || w.windAvg == null) return null;
     var M = store.model;
-    if (M && M.ready) return { p: L.predict(M.model, L.vector(w)), by: 'model' };
+    // A model trained before the feature list changed is ignored until it retrains.
+    if (M && M.ready && M.model.sc && M.model.sc.mu.length === L.FEATURES.length) return { p: L.predict(M.model, L.vector(w)), by: 'model' };
     return { p: L.starter(w), by: 'rules' };
   }
   function trainingRows() {
@@ -372,7 +373,8 @@
   function snapshot() {
     var t = S.todayKey(), e = store.days[t];
     if (e && e.outcome) return;
-    if (S.nowMinutes() >= 18 * 60 && store.preds[t]) return; // frozen once practice starts
+    var P = S.practice(t);
+    if (S.nowMinutes() >= P.start[0] * 60 + P.start[1] && store.preds[t]) return; // frozen once practice starts
     var pr = predictFor(weatherFor(t));
     if (pr) store.preds[t] = { p: pr.p, by: pr.by, at: Date.now() };
     var cut = S.addDays(t, -14);
@@ -385,6 +387,7 @@
     var w = store.days[d].weather, t = S.todayKey();
     if (w && w.source === 'manual') return false;
     if (!w || w.tempAvg == null) return true;
+    if (w.v !== W.FEATURE_VERSION) return true;   // computed with older rules (e.g. before Saturday mornings)
     if (w.provisional && d < t) return true;
     if (w.provisional && d === t && Date.now() - (w.fetchedAt || 0) > FORECAST_TTL) return true;
     return false;
@@ -395,9 +398,9 @@
     var changed = false;
     try {
       var t = S.todayKey();
-      if (force || !store.forecast || Date.now() - store.forecast.fetchedAt > FORECAST_TTL || store.forecast.today !== t) {
+      if (force || !store.forecast || Date.now() - store.forecast.fetchedAt > FORECAST_TTL || store.forecast.today !== t || store.forecast.v !== W.FEATURE_VERSION) {
         var f = await W.fetchRange(S.addDays(t, -7), S.addDays(t, W.FORECAST_AHEAD));
-        store.forecast = { fetchedAt: Date.now(), today: t, days: f };
+        store.forecast = { fetchedAt: Date.now(), today: t, days: f, v: W.FEATURE_VERSION };
       }
       var need = Object.keys(store.days).filter(needsWeather).sort();
       var fromForecast = need.filter(function (d) { return store.forecast.days[d]; });
@@ -530,7 +533,7 @@
   function renderStatus() {
     var sub = $('#headSub'); if (!sub) return;
     var f = store.forecast;
-    sub.innerHTML = 'Practice 6:00–8:15 PM · ' + esc(S.PLACE.name) + ' · ' +
+    sub.innerHTML = 'Practice 6:00–8:15 PM, Saturdays 10:00 AM–12:15 PM · ' + esc(S.PLACE.name) + ' · ' +
       (syncing ? 'updating weather…' : syncError ? '<span style="color:var(--danger)">' + esc(syncError) + '</span>' : f ? 'weather updated ' + ago(f.fetchedAt) : 'weather not loaded yet') +
       '<br>' + (mode === 'shared'
         ? (net.error ? '<span style="color:var(--warn)">' + esc(net.error) + '</span>' : 'Shared with every device' + (net.lastOk ? ' · synced ' + ago(net.lastOk) : ' · syncing…'))
@@ -555,16 +558,16 @@
     var lightTxt = light.daylight >= light.window ? 'Daylight all practice' : light.daylight > 0 ? light.daylight + ' min of daylight' : light.twilight > 0 ? 'Dark after ' + light.twilight + ' min of twilight' : 'Dark the whole practice';
     el.innerHTML =
       '<div class="hero-body"><div>' +
-        '<div class="hero-date">' + fmtDate(t) + ' · Today’s practice' + (pr ? '<span class="badge">' + (pr.by === 'model' ? icon('cpu') + 'AI model' : 'Starter rules') + '</span>' : '') + '</div>' +
+        '<div class="hero-date">' + fmtDate(t) + ' · Today’s practice, ' + S.practice(t).label + (pr ? '<span class="badge">' + (pr.by === 'model' ? icon('cpu') + 'AI model' : 'Starter rules') + '</span>' : '') + '</div>' +
         (pr ? '<div class="verdict"><span class="verdict-icon">' + icon(water ? 'waves' : 'land') + '</span><h2>' + (water ? 'On the water' : 'On land') + '</h2></div>' +
           '<p class="verdict-sub">' + certaintyWord(cert) + ' · ' + pct(pr.p) + ' chance of rowing on the water</p>' +
           '<p class="verdict-sub" style="margin-top:4px;font-size:13px">' + acc + '</p>'
-          : '<div class="verdict"><span class="verdict-icon">' + icon('refresh') + '</span><h2 style="font-size:24px">Waiting for weather</h2></div><p class="verdict-sub">' + (syncError ? 'Weather could not be loaded: ' + esc(syncError) : 'Loading the 6–8 PM forecast for Milton Harbor…') + '</p>') +
+          : '<div class="verdict"><span class="verdict-icon">' + icon('refresh') + '</span><h2 style="font-size:24px">Waiting for weather</h2></div><p class="verdict-sub">' + (syncError ? 'Weather could not be loaded: ' + esc(syncError) : 'Loading the practice-time forecast for Milton Harbor…') + '</p>') +
       '</div>' +
       (pr ? '<div class="ring" title="Certainty"><svg viewBox="0 0 112 112"><circle class="track" cx="56" cy="56" r="47"/><circle class="prog" cx="56" cy="56" r="47" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + (C * (1 - cert)).toFixed(1) + '"/></svg><div class="ring-label"><b>' + pct(cert) + '</b><span>certainty</span></div></div>' : '') +
       '</div>' +
       (w ? '<div class="wx">' +
-        wx('thermo', 'Temperature', num(w.tempAvg) + '°F', 'low ' + num(w.tempMin) + '°F, 6–8 PM') +
+        wx('thermo', 'Temperature', num(w.tempAvg) + '°F', 'low ' + num(w.tempMin) + '°F, ' + S.practice(t).short) +
         wx('wind', 'Wind', num(w.windAvg) + ' mph', 'gusts ' + num(w.gustMax) + ' mph') +
         wx('up', 'Direction', (w.dir == null ? '–' : '<span class="arrow" style="transform:rotate(' + ((w.dir + 180) % 360) + 'deg)">↑</span> ' + W.compass(w.dir)), w.dir == null ? '' : 'from ' + w.dir + '°') +
         wx('sunset', 'Light', light.daylight + light.twilight + ' min', lightTxt + (light.sunset ? ' · sunset ' + light.sunset : '')) +
@@ -609,14 +612,14 @@
       var d = S.addDays(t, k), w = store.forecast && store.forecast.days[d], pr = predictFor(w);
       var water = pr && pr.p >= 0.5, dt = dateObj(d);
       cards += '<div class="day-card" style="--c:' + (pr ? (water ? 'var(--water)' : 'var(--land)') : 'var(--text-3)') + '">' +
-        '<div class="dn">' + (k === 1 ? 'Tomorrow' : DOW[dt.getUTCDay()]) + '</div><div class="dd">' + MON[dt.getUTCMonth()] + ' ' + dt.getUTCDate() + '</div>' +
+        '<div class="dn">' + (k === 1 ? 'Tomorrow' : DOW[dt.getUTCDay()]) + '</div><div class="dd">' + MON[dt.getUTCMonth()] + ' ' + dt.getUTCDate() + (S.practice(d).id === 'sat' ? ' · AM' : '') + '</div>' +
         '<div class="di">' + icon(pr ? (water ? 'waves' : 'land') : 'refresh') + '</div>' +
         '<div class="dp">' + (pr ? (water ? 'Water' : 'Land') + ' ' + pct(Math.max(pr.p, 1 - pr.p)) : '–') + '</div>' +
         '<div class="dw">' + (w ? num(w.tempAvg) + '° · ' + num(w.windAvg) + ' mph ' + W.compass(w.dir) : 'no forecast') + '</div>' +
         '<div class="bar" title="Chance of water: ' + (pr ? pct(pr.p) : '–') + '"><span style="width:' + (pr ? pr.p * 100 : 0) + '%"></span></div>' +
       '</div>';
     }
-    el.innerHTML = '<div class="panel-head"><span class="panel-title">Next 7 days <span class="muted">· forecast for 6–8 PM</span></span></div><div class="panel-body"><div class="week">' + cards + '</div></div>';
+    el.innerHTML = '<div class="panel-head"><span class="panel-title">Next 7 days <span class="muted">· forecast for practice time</span></span></div><div class="panel-body"><div class="week">' + cards + '</div></div>';
   }
 
   function renderModel() {
@@ -699,9 +702,9 @@
         '<td title="' + esc(e.ratingNote || '') + '">' + (e.rating ? e.rating + '/5' + (e.ratingNote ? ' ✎' : '') : e.outcome === 'water' ? '<span class="muted">–</span>' : '') + '</td>' +
         '<td style="text-align:right"><button class="icon-btn sm" data-edit aria-label="Edit ' + d + '">' + icon('edit') + '</button><button class="icon-btn sm danger" data-del aria-label="Delete ' + d + '">' + icon('trash') + '</button></td></tr>';
     }).join('');
-    el.innerHTML = head + '<div class="table-wrap"><table class="data"><thead><tr><th title="Use for training">Use</th><th>Date</th><th>Practice</th><th>Temp</th><th>Wind mph</th><th>Gusts</th><th>From</th><th title="Minutes of daylight + twilight during 6:00–8:15 PM">Light min</th><th>Clouds</th><th>Rain in</th><th title="Prediction from a model that did not see this day (cross-validation)">Held-out guess</th><th title="The prediction shown on the day, before practice">Live guess</th><th title="Conditions on the water, 1–5">Cond.</th><th></th></tr></thead><tbody>' +
+    el.innerHTML = head + '<div class="table-wrap"><table class="data"><thead><tr><th title="Use for training">Use</th><th>Date</th><th>Practice</th><th>Temp</th><th>Wind mph</th><th>Gusts</th><th>From</th><th title="Minutes of daylight + twilight during practice">Light min</th><th>Clouds</th><th>Rain in</th><th title="Prediction from a model that did not see this day (cross-validation)">Held-out guess</th><th title="The prediction shown on the day, before practice">Live guess</th><th title="Conditions on the water, 1–5">Cond.</th><th></th></tr></thead><tbody>' +
       (rows || '<tr><td colspan="14" class="muted" style="text-align:center;padding:20px">No days match this filter.</td></tr>') + '</tbody></table></div>' +
-      '<div class="panel-foot">Uncheck <b style="color:var(--text-2)">Use</b> to leave a day out of training without deleting it. Weather is for 6–8 PM; light is minutes of daylight + twilight between 6:00 and 8:15 PM.</div>';
+      '<div class="panel-foot">Uncheck <b style="color:var(--text-2)">Use</b> to leave a day out of training without deleting it. Weather is for practice hours (6–8 PM; Saturdays 10 AM–12 PM). Light is minutes of daylight + twilight during practice.</div>';
     bindFilter();
   }
   function guess(p, outcome) {
@@ -721,12 +724,12 @@
     // Today: most similar day, or a generated "what it might feel like".
     html += '<section class="panel hero" style="--verdict:var(--water)">';
     if (!w) {
-      html += '<div class="panel-body"><h3 style="margin:0 0 6px">Waiting for today’s forecast</h3><p class="muted" style="margin:0">' + (syncError ? esc(syncError) : 'Loading 6–8 PM weather for Milton Harbor…') + '</p></div>';
+      html += '<div class="panel-body"><h3 style="margin:0 0 6px">Waiting for today’s forecast</h3><p class="muted" style="margin:0">' + (syncError ? esc(syncError) : 'Loading practice-time weather for Milton Harbor…') + '</p></div>';
     } else {
       var matches = C.similarDays(w, store.days, t), best = matches[0], exp = C.expected(w, store.days, t);
       var matched = best && best.sim >= C.MATCH;
       html += '<div class="hero-body"><div>' +
-        '<div class="hero-date">' + fmtDate(t) + ' · Today on the water, 6–8 PM</div>' +
+        '<div class="hero-date">' + fmtDate(t) + ' · Today on the water, ' + S.practice(t).label + '</div>' +
         '<div class="verdict"><span class="verdict-icon" style="--verdict:oklch(var(--al) var(--ac) ' + RATE_HUE[Math.round(exp.rating)] + ')">' + icon('waves') + '</span>' +
           '<div><h2>' + exp.rating.toFixed(1) + '<span class="muted" style="font-size:18px;font-weight:500"> / 5</span></h2>' + stars(exp.rating, 16) + '</div></div>' +
         '<p class="verdict-sub">Expected: <b>' + C.LABELS[Math.round(exp.rating)] + '</b> · ' +
@@ -977,12 +980,12 @@
       '<div class="form-row"><label class="check-label"><input type="checkbox" id="einc"' + (e.include === false ? '' : ' checked') + '>Use this day for training</label></div>' +
       '<div class="form-row" id="erateRow"><span class="form-label">Conditions on the water</span><div class="seg" id="erate"><button data-v="0">Not rated</button>' + [1, 2, 3, 4, 5].map(function (k) { return '<button data-v="' + k + '" title="' + C.LABELS[k] + '">' + k + '</button>'; }).join('') + '</div>' +
         '<input class="text-input sm" id="ernote" maxlength="140" style="margin-top:8px" placeholder="Short note about the water" value="' + esc(e.ratingNote || '') + '"></div>' +
-      '<div class="section-label" style="margin:18px 0 8px;display:flex;justify-content:space-between;align-items:center">Weather, 6–8 PM <button type="button" class="btn btn-ghost btn-sm" id="refetch">' + icon('refresh') + 'Re-fetch</button></div>' +
+      '<div class="section-label" style="margin:18px 0 8px;display:flex;justify-content:space-between;align-items:center">Weather, ' + S.practice(d).short + ' <button type="button" class="btn btn-ghost btn-sm" id="refetch">' + icon('refresh') + 'Re-fetch</button></div>' +
       '<div class="form-grid">' + FIELDS.map(function (f) {
         return '<div><label class="form-label" for="f-' + f[0] + '">' + f[1] + '</label><input class="text-input sm" type="number" step="any" id="f-' + f[0] + '" value="' + (w[f[0]] == null ? '' : w[f[0]]) + '"></div>';
       }).join('') +
       '<div><span class="form-label">Thunder</span><label class="check-label" style="height:32px"><input type="checkbox" id="f-thunder"' + (w.thunder ? ' checked' : '') + '>Storms</label></div></div>' +
-      '<p class="muted" style="font-size:12.5px;margin:10px 0 0">Light (calculated): ' + L2.daylight + ' min daylight + ' + L2.twilight + ' min twilight during 6:00–8:15 PM' + (L2.sunset ? ' · sunset ' + L2.sunset : '') + '. Source: ' + (w.source === 'manual' ? 'entered by hand' : w.source ? 'Open-Meteo' + (w.provisional ? ' (forecast)' : '') : 'none yet') + '.</p>' +
+      '<p class="muted" style="font-size:12.5px;margin:10px 0 0">Light (calculated): ' + L2.daylight + ' min daylight + ' + L2.twilight + ' min twilight during ' + S.practice(d).label + (L2.sunset ? ' · sunset ' + L2.sunset : '') + '. Source: ' + (w.source === 'manual' ? 'entered by hand' : w.source ? 'Open-Meteo' + (w.provisional ? ' (forecast)' : '') : 'none yet') + '.</p>' +
       '<div class="form-row"><label class="form-label" for="enote">Note</label><textarea class="text-area" id="enote" rows="2" placeholder="e.g. lightning nearby, coach call">' + esc(e.note || '') + '</textarea></div>' +
       '</div>');
     var outcome = e.outcome, rating = e.rating || 0;
@@ -1012,7 +1015,7 @@
         var nw = Object.assign({}, w);
         FIELDS.forEach(function (f) { var v = $('#f-' + f[0], body).value; nw[f[0]] = v === '' ? null : +v; });
         nw.thunder = $('#f-thunder', body).checked ? 1 : 0;
-        nw.daylight = L2.daylight; nw.twilight = L2.twilight; nw.sunset = L2.sunset;
+        nw.daylight = L2.daylight; nw.twilight = L2.twilight; nw.sunset = L2.sunset; nw.window = S.practice(d).id;
         if (edited || nw.thunder !== (w.thunder ? 1 : 0)) { nw.source = 'manual'; nw.provisional = false; }
         e.outcome = outcome; e.include = $('#einc', body).checked; e.note = $('#enote', body).value.trim();
         e.rating = outcome === 'water' && rating ? rating : null; e.ratingNote = $('#ernote', body).value.trim();

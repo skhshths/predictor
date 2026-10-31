@@ -2,7 +2,8 @@
    Weather for Rye, NY from Open-Meteo (free, no API key, CORS enabled).
    Recent and upcoming days come from the forecast API (which also serves
    the last ~3 months); older days come from the historical archive.
-   Each date is reduced to the 6–8 PM practice features the model uses.
+   Each date is reduced to features for that day's practice hours
+   (6, 7 and 8 PM; on Saturdays 10 AM, 11 AM and noon).
    ========================================================================= */
 (function () {
   'use strict';
@@ -11,7 +12,7 @@
   var HOURLY = 'temperature_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation,cloud_cover,weather_code';
   var FORECAST = 'https://api.open-meteo.com/v1/forecast';
   var ARCHIVE = 'https://archive-api.open-meteo.com/v1/archive';
-  var PRACTICE_HOURS = [18, 19, 20];       // 6, 7 and 8 PM
+  var FEATURE_VERSION = 2;                 // bump when features change so stored days are re-fetched
   var FORECAST_BACK = 80;                  // days the forecast API reliably covers in the past
   var FORECAST_AHEAD = 15;
 
@@ -33,7 +34,8 @@
   // Reduce one day's hourly series to practice features.
   function features(dateKey, H) {
     var temp = [], wind = [], gust = [], u = 0, v = 0, rain = 0, cloud = [], thunder = false, codes = [];
-    PRACTICE_HOURS.forEach(function (h) {
+    var P = S.practice(dateKey), hours = P.hours;
+    hours.forEach(function (h) {
       var r = H[h];
       if (!r) return;
       if (r.t != null) temp.push(r.t);
@@ -44,7 +46,7 @@
       if (r.c != null) cloud.push(r.c);
       if (r.code != null) codes.push(r.code);
     });
-    [17, 18, 19, 20].forEach(function (h) { if (H[h] && H[h].code >= 95) thunder = true; });
+    [hours[0] - 1].concat(hours).forEach(function (h) { if (H[h] && H[h].code >= 95) thunder = true; });
     if (!temp.length || !wind.length) return null;
     var dir = (u === 0 && v === 0) ? null : (Math.atan2(u, v) * 180 / Math.PI + 360) % 360;
     var L = S.light(dateKey);
@@ -55,7 +57,7 @@
       precip: round(rain, 2), cloud: cloud.length ? Math.round(avg(cloud)) : null,
       thunder: thunder ? 1 : 0, code: codes.length ? Math.max.apply(null, codes) : null,
       daylight: L.daylight, twilight: L.twilight, sunset: L.sunset,
-      source: 'open-meteo'
+      window: P.id, v: FEATURE_VERSION, source: 'open-meteo'
     };
   }
 
@@ -107,8 +109,8 @@
   // Weather that only comes from the date (used for manual entries without a fetch).
   function lightOnly(dateKey) {
     var L = S.light(dateKey);
-    return { daylight: L.daylight, twilight: L.twilight, sunset: L.sunset };
+    return { daylight: L.daylight, twilight: L.twilight, sunset: L.sunset, window: S.practice(dateKey).id };
   }
 
-  window.Weather = { fetchRange: fetchRange, parse: parse, compass: compass, lightOnly: lightOnly, FORECAST_AHEAD: FORECAST_AHEAD, PRACTICE_HOURS: PRACTICE_HOURS };
+  window.Weather = { fetchRange: fetchRange, parse: parse, compass: compass, lightOnly: lightOnly, FORECAST_AHEAD: FORECAST_AHEAD, FEATURE_VERSION: FEATURE_VERSION };
 })();

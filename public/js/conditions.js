@@ -3,7 +3,7 @@
    matching, and an estimate of what a day might feel like when no logged
    day is close enough.
 
-   Similarity compares the 6–8 PM weather of two days feature by feature,
+   Similarity compares the practice-time weather of two days feature by feature,
    using natural scales (e.g. 5 mph of wind ≈ 10 °F of temperature in
    importance) and weights that favour what matters most on the water:
    wind, gusts and wind direction.
@@ -118,7 +118,7 @@
     if (gust != null && wind != null && gust - wind >= 8) lines.push('Gusty: sudden puffs to about ' + round(gust) + ' mph.');
     if (t != null) {
       var feel = t < 40 ? 'Cold' : t < 50 ? 'Chilly' : t < 62 ? 'Cool' : t < 75 ? 'Mild' : t < 85 ? 'Warm' : 'Hot';
-      lines.push(feel + ', about ' + round(t) + '°F' + (tl != null && t - tl >= 3 ? ', dropping to ' + round(tl) + '°F' : '') + '.');
+      lines.push(feel + ', about ' + round(t) + '°F' + (tl != null && t - tl >= 3 ? ' (low of ' + round(tl) + '°F)' : '') + '.');
     }
     var L = window.Sun.light(dateKey);
     if (L.daylight >= L.window) lines.push('Daylight the whole practice.');

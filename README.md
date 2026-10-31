@@ -1,6 +1,8 @@
 # RAR Predictor
 
-A password-locked web app that predicts whether the **RowAmerica Rye (RAR)** team will practice **on the water or on land**. It looks at the 6–8 PM weather and the light during practice (6:00–8:15 PM) at the boathouse on Milton Harbor, Rye, NY.
+A password-locked web app that predicts whether the **RowAmerica Rye (RAR)** team will practice **on the water or on land**. It looks at the weather and the light during practice at the boathouse on Milton Harbor, Rye, NY.
+
+**Practice times:** **6:00–8:15 PM**, except **Saturdays, 10:00 AM–12:15 PM**. Every day is measured over its own practice window.
 
 You log what actually happened each day. The app collects that day's weather by itself, retrains its AI model on your history, and shows each prediction with an **accuracy** and a **certainty**.
 
@@ -66,7 +68,7 @@ Then open http://localhost:8787. It uses a local copy of the Durable Object, sep
 
 ## Daily use
 
-1. Open the app. It refreshes the forecast for today's 6–8 PM window and for the next 7 days, and shows the prediction.
+1. Open the app. It refreshes the forecast for today's practice window and for the next 7 days, and shows the prediction. Saturdays use the morning window and are marked "AM" in the 7-day strip.
 2. After practice, tap **On the water**, **On land** or **No practice** on the main card. On water days, also tap a **1–5 rating** for how it was and add a short note.
 3. That's it. The app does the rest:
    - stores today's weather with your answer
@@ -80,19 +82,29 @@ Forgot a day? Use **Add past days**, or edit any row in the data table.
 
 ## What the model looks at
 
+All weather features use the hours of that day's practice:
+
+| Day | Practice | Weather hours | Thunderstorm check |
+| --- | --- | --- | --- |
+| Saturday | 10:00 AM–12:15 PM | 10 AM, 11 AM and noon | 9 AM to noon |
+| Every other day | 6:00–8:15 PM | 6, 7 and 8 PM | 5 to 8 PM |
+
+The table below uses the evening hours as the example.
+
 | Feature | How it's measured |
 | --- | --- |
-| Temperature | Average °F at 6, 7 and 8 PM; the low is shown too |
-| Wind speed | Average mph at 6, 7 and 8 PM |
-| Wind gusts | Highest gust in mph, 6–8 PM |
+| Temperature | Average °F over the practice hours; the low is shown too |
+| Wind speed | Average mph over the practice hours |
+| Wind gusts | Highest gust in mph during practice |
 | Wind direction | Average direction the wind blows from, weighted by speed. The model gets it as two signed components (north/south and east/west), so it can learn things like "a strong southerly is worse than a light northerly". |
-| Daylight | Minutes with the sun above the horizon between 6:00 and 8:15 PM |
+| Daylight | Minutes with the sun above the horizon during practice (6:00–8:15 PM, or 10:00 AM–12:15 PM on Saturdays) |
 | Twilight | Minutes of civil twilight (sun 0–6° below the horizon) in the same window |
-| Cloud cover | Average %, 6–8 PM |
-| Rain | Inches of precipitation, 6–8 PM |
-| Thunderstorms | Whether any thunderstorm weather code appears from 5 to 8 PM |
+| Cloud cover | Average % during practice |
+| Rain | Inches of precipitation during practice |
+| Thunderstorms | Whether any thunderstorm weather code appears from an hour before practice until it ends |
+| Saturday morning | Whether it's a Saturday morning practice, so the model can learn whether coaches decide differently then |
 
-Light is **calculated from the sun's position** for the boathouse's coordinates and date, so it's exact for any day, past or future, and needs no internet. For example, it gives 135 daylight minutes in late June but none by early November. Sunset times match published values for the area, including the daylight-saving changes.
+Light is **calculated from the sun's position** for the boathouse's coordinates and date, so it's exact for any day, past or future, and needs no internet. For example, an evening practice gets 135 daylight minutes in late June but none by early November. Saturday morning practices always get the full 135 minutes of daylight. Sunset times match published values for the area, including the daylight-saving changes.
 
 ---
 
@@ -100,7 +112,7 @@ Light is **calculated from the sun's position** for the boathouse's coordinates 
 
 - **Certainty** is how sure the model is about one prediction: the model's probability for the outcome it predicts. "On land, 87% certainty" means it gives a 13% chance of rowing on the water. Labels: ≥85% *very confident*, ≥70% *fairly confident*, ≥60% *leaning*, otherwise *toss-up*.
 - **Accuracy** is how often the model is right on **days it has not seen**. Every day is predicted by a version of the model trained without that day (cross-validation). This is an honest estimate, not a score on the training data.
-- **Live record** counts the predictions the app actually showed before practice that turned out right. A snapshot is taken whenever the app is opened before 6 PM and frozen once practice starts.
+- **Live record** counts the predictions the app actually showed before practice that turned out right. A snapshot is taken whenever the app is opened before practice (before 6 PM, or 10 AM on Saturdays) and frozen once practice starts.
 - **Baseline** is the accuracy of always guessing the most common outcome. A useful model should beat it, and the app tells you whether it does.
 
 With fewer than about 25 logged days, expect the accuracy number to move around.
@@ -189,7 +201,7 @@ Tapping the same number again clears the rating. Ratings and notes sync to every
 
 **Next 7 days** shows the expected rating for each forecast day and the closest past day it resembles.
 
-**How similarity works:** two days are compared on the 6–8 PM weather. Each feature is put on a natural scale (5 mph of wind ≈ 7 mph of gusts ≈ 10°F ≈ 40 minutes of light) and weighted by how much it matters on the water:
+**How similarity works:** two days are compared on the weather during their practice hours. Each feature is put on a natural scale (5 mph of wind ≈ 7 mph of gusts ≈ 10°F ≈ 40 minutes of light) and weighted by how much it matters on the water:
 - wind ×3
 - gusts ×2
 - wind direction ×1.5 for each of its two components
@@ -294,7 +306,7 @@ predictor/
     ├── css/styles.css    Design tokens (light/dark) and all components
     └── js/
         ├── sun.js        Boathouse location, Rye time zone helpers, solar position, practice light
-        ├── weather.js    Open-Meteo fetching (forecast + archive) → 6–8 PM features
+        ├── weather.js    Open-Meteo fetching (forecast + archive) → practice-time features
         ├── model.js      Features, logistic regression, neural network, cross-validation,
         │                 model selection, importance, starter rules (also runs in a Web Worker)
         ├── conditions.js Ratings, similar-day matching, expected rating, "might feel like" text
@@ -311,8 +323,7 @@ predictor/
 | How similar days are compared | `FEATS` (scales and weights) and `MATCH` (the 65% threshold) in `public/js/conditions.js` |
 | How fast devices sync | the `30000` ms interval in `start()` in `public/js/app.js` |
 | Location | `PLACE` in `public/js/sun.js` (lat, lon, elevation, time zone) |
-| Practice window for light | `PRACTICE` in `public/js/sun.js` |
-| Hours used for weather | `PRACTICE_HOURS` in `public/js/weather.js` |
+| Practice times (light window and weather hours, per day) | `SCHEDULE` and `practice()` in `public/js/sun.js` |
 | Minimum data before training | `MIN_DAYS` and `MIN_EACH` in `public/js/model.js` |
 | Models tried | `CANDIDATES` in `public/js/model.js` |
 | Starter rules | `starter()` in `public/js/model.js` |
