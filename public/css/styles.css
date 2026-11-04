@@ -245,6 +245,27 @@ svg.i { width: 18px; height: 18px; flex: none; stroke: currentColor; fill: none;
 .upcoming .um { color: var(--text-3); font-size: 12.5px; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .data.cond td { vertical-align: middle; }
 
+/* ---------- Plans, half & half, land reasons ---------- */
+.badge.split { color: var(--text); background: linear-gradient(90deg, color-mix(in oklch, var(--water) 18%, transparent), color-mix(in oklch, var(--land) 20%, transparent)); }
+.btn-split { color: var(--text); background: linear-gradient(90deg, color-mix(in oklch, var(--water) 14%, transparent), color-mix(in oklch, var(--land) 16%, transparent)); }
+.btn-split:hover { background: linear-gradient(90deg, color-mix(in oklch, var(--water) 22%, transparent), color-mix(in oklch, var(--land) 24%, transparent)); }
+.btn-split.on { color: #fff; background: linear-gradient(90deg, var(--water), var(--land)); }
+.plan-link { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border-radius: 99px; font-size: 12px; font-weight: 500; color: var(--text-2); border: 1px dashed var(--border-strong); background: var(--surface); transition: color .15s, border-color .15s; }
+.plan-link:hover { color: var(--text); border-color: var(--text-3); }
+.plan-link svg.i { width: 13px; height: 13px; }
+.plan-opts { display: flex; flex-direction: column; gap: 8px; margin: 14px 0 6px; }
+.plan-opt { display: flex; gap: 12px; align-items: flex-start; text-align: left; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); transition: border-color .15s, background-color .15s; }
+.plan-opt:hover { border-color: var(--border-strong); background: var(--hover); }
+.plan-opt[aria-pressed="true"] { border-color: var(--water); background: color-mix(in oklch, var(--water) 8%, var(--surface)); }
+.plan-opt svg.i { margin-top: 2px; color: var(--text-2); }
+.plan-opt b { display: block; font-size: 14px; }
+.plan-opt small { display: block; color: var(--text-2); font-size: 12.5px; margin-top: 2px; line-height: 1.45; }
+.why-row .seg button[aria-pressed="true"][data-why="planned"] { color: var(--text-2); }
+button.day-card { font: inherit; color: inherit; width: 100%; cursor: pointer; transition: border-color .15s, box-shadow .15s, transform .2s var(--ease); }
+button.day-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-sm); }
+button.day-card:active { transform: scale(.98); }
+.day-card.planned { border-style: dashed; border-color: color-mix(in oklch, var(--c) 55%, var(--border)); }
+
 /* ---------- Week ---------- */
 .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
 .day-card { border: 1px solid var(--border); border-radius: 12px; padding: 10px 10px 9px; text-align: center; background: var(--surface); min-width: 0; }

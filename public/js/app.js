@@ -65,6 +65,7 @@
     upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>',
     sparkles: '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>',
     star: '<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>',
+    split: '<path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"/><path d="m15 9 6-6"/>',
     table: '<path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/>'
   };
   function icon(name, style) { return '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"' + (style ? ' style="' + style + '"' : '') + '>' + (ICONS[name] || '') + '</svg>'; }
@@ -352,19 +353,36 @@
     if (M && M.ready && M.model.sc && M.model.sc.mu.length === L.FEATURES.length) return { p: L.predict(M.model, L.vector(w)), by: 'model' };
     return { p: L.starter(w), by: 'rules' };
   }
+  // What a logged day teaches the model:
+  //   1    the weather allowed rowing (on the water, or half & half)
+  //   0    the weather kept the team on land
+  //   null not a weather decision (planned land day, no practice): never used for training
+  function labelOf(e) {
+    if (!e || !e.outcome) return null;
+    if (e.outcome === 'water' || e.outcome === 'split') return 1;
+    if (e.outcome === 'land') return e.landWhy === 'planned' ? null : 0;
+    return null;
+  }
+  function onWater(e) { return !!e && (e.outcome === 'water' || e.outcome === 'split'); }
+  function outcomeText(e) {
+    if (!e || !e.outcome) return '';
+    return e.outcome === 'water' ? 'on the water' : e.outcome === 'split' ? 'half & half' : e.outcome === 'none' ? 'no practice' : e.landWhy === 'planned' ? 'planned land day' : 'on land (weather)';
+  }
+  function loggedDates() { return Object.keys(store.days).filter(function (d) { return store.days[d].outcome; }); }
   function trainingRows() {
     return Object.keys(store.days).sort().filter(function (d) {
       var e = store.days[d];
-      return (e.outcome === 'water' || e.outcome === 'land') && e.include !== false && e.weather && e.weather.tempAvg != null && e.weather.windAvg != null;
-    }).map(function (d) { var e = store.days[d]; return { date: d, x: L.vector(e.weather), y: e.outcome === 'water' ? 1 : 0 }; });
+      return labelOf(e) !== null && e.include !== false && e.weather && e.weather.tempAvg != null && e.weather.windAvg != null;
+    }).map(function (d) { var e = store.days[d]; return { date: d, x: L.vector(e.weather), y: labelOf(e) }; });
   }
   function signature(rows) { return rows.map(function (r) { return r.date + r.y + r.x.map(function (v) { return isNaN(v) ? '' : Math.round(v * 100); }).join(','); }).join('|'); }
   function liveRecord() {
     var n = 0, ok = 0;
     Object.keys(store.days).forEach(function (d) {
       var e = store.days[d];
-      if (!e.prediction || (e.outcome !== 'water' && e.outcome !== 'land')) return;
-      n++; if ((e.prediction.p >= 0.5) === (e.outcome === 'water')) ok++;
+      var y = labelOf(e);
+      if (!e.prediction || y === null) return;
+      n++; if ((e.prediction.p >= 0.5) === (y === 1)) ok++;
     });
     return { n: n, ok: ok };
   }
@@ -384,6 +402,7 @@
   /* ---------- Weather sync ---------- */
   var syncing = false, syncError = null;
   function needsWeather(d) {
+    if (!store.days[d].outcome) return false;   // plan-only entries (future days) have no weather of their own
     var w = store.days[d].weather, t = S.todayKey();
     if (w && w.source === 'manual') return false;
     if (!w || w.tempAvg == null) return true;
@@ -466,21 +485,48 @@
   var retrainSoon = debounce(function () { maybeRetrain(); }, 500);
 
   /* ---------- Logging ---------- */
-  function logOutcome(date, outcome) {
+  function logOutcome(date, outcome, why) {
     var e = store.days[date] || { include: true };
     var prev = JSON.parse(JSON.stringify(store.days[date] || null));
     e.outcome = outcome;
+    if (e.include == null) e.include = true;
+    if (outcome === 'land') e.landWhy = why || e.landWhy || (e.plan === 'land' ? 'planned' : 'weather');
+    else delete e.landWhy;
     e.loggedAt = Date.now();
     if (!e.weather && weatherFor(date)) e.weather = Object.assign({}, weatherFor(date));
     if (!e.prediction && store.preds[date]) e.prediction = store.preds[date];
     store.days[date] = e;
     save(); renderAll(); retrainSoon();
     if (needsWeather(date)) sync();
-    var label = outcome === 'water' ? 'on the water' : outcome === 'land' ? 'on land' : 'no practice';
-    toast('Logged ' + relDay(date).toLowerCase() + ': ' + label, { action: 'Undo', onAction: function () {
+    toast('Logged ' + relDay(date).toLowerCase() + ': ' + outcomeText(e), { action: 'Undo', onAction: function () {
       if (prev) store.days[date] = prev; else delete store.days[date];
       save(); renderAll(); retrainSoon();
     } });
+  }
+
+  // Plans for today or upcoming days: a planned land day or a half & half practice.
+  // Stored on the day's entry until an outcome is logged.
+  var PLAN_TEXT = { weather: 'Weather decides', land: 'Planned land day', split: 'Half & half' };
+  function setPlan(date, plan) {
+    var e = store.days[date] || {};
+    if (plan === 'weather') delete e.plan; else e.plan = plan;
+    if (!e.outcome && !e.plan) delete store.days[date]; else store.days[date] = e;
+    save(); renderAll();
+  }
+  function planDialog(date) {
+    var e = store.days[date], cur = (e && e.plan) || 'weather';
+    var body = h('<div><p class="confirm-text">' + (date === S.todayKey() ? 'Today' : fmtDate(date)) + ', ' + S.practice(date).label + '. Is this practice already decided?</p>' +
+      '<div class="plan-opts">' +
+        ['weather', 'land', 'split'].map(function (k) {
+          var sub = { weather: 'Normal day: the forecast decides water or land.', land: 'A land day for its own sake, not because of the weather. Not used to train the model.', split: 'Half the practice on the water, then swap with the land half. The prediction shows the chance the water half can go ahead.' }[k];
+          return '<button type="button" class="plan-opt" data-p="' + k + '" aria-pressed="' + (cur === k) + '">' + icon(k === 'land' ? 'land' : k === 'split' ? 'split' : 'waves') + '<span><b>' + PLAN_TEXT[k] + '</b><small>' + sub + '</small></span></button>';
+        }).join('') + '</div></div>');
+    var m = modal({ title: 'Plan for ' + relDay(date).toLowerCase(), body: body });
+    body.addEventListener('click', function (ev) {
+      var b = ev.target.closest('[data-p]'); if (!b) return;
+      setPlan(date, b.dataset.p); m.close();
+      toast(fmtDate(date) + ': ' + PLAN_TEXT[b.dataset.p].toLowerCase());
+    });
   }
 
   /* ---------- Rendering ---------- */
@@ -550,7 +596,8 @@
     var snap = e && e.prediction;
     if (e && e.outcome && snap) pr = { p: snap.p, by: snap.by };
     var water = pr && pr.p >= 0.5, cert = pr ? Math.max(pr.p, 1 - pr.p) : 0;
-    el.style.setProperty('--verdict', pr ? (water ? 'var(--water)' : 'var(--land)') : 'var(--text-3)');
+    var plan = e && !e.outcome ? e.plan : null;
+    el.style.setProperty('--verdict', plan === 'land' ? 'var(--land)' : plan === 'split' ? 'var(--water)' : pr ? (water ? 'var(--water)' : 'var(--land)') : 'var(--text-3)');
     var acc = M && M.ready ? 'Model accuracy <b>' + pct(M.cv.acc) + '</b> (' + M.cv.correct + ' of ' + M.cv.n + ' days it hadn’t seen)'
       : 'Using starter rules until you log ' + L.MIN_DAYS + '+ days with at least ' + L.MIN_EACH + ' of each';
     var C = 2 * Math.PI * 47;
@@ -558,13 +605,19 @@
     var lightTxt = light.daylight >= light.window ? 'Daylight all practice' : light.daylight > 0 ? light.daylight + ' min of daylight' : light.twilight > 0 ? 'Dark after ' + light.twilight + ' min of twilight' : 'Dark the whole practice';
     el.innerHTML =
       '<div class="hero-body"><div>' +
-        '<div class="hero-date">' + fmtDate(t) + ' · Today’s practice, ' + S.practice(t).label + (pr ? '<span class="badge">' + (pr.by === 'model' ? icon('cpu') + 'AI model' : 'Starter rules') + '</span>' : '') + '</div>' +
-        (pr ? '<div class="verdict"><span class="verdict-icon">' + icon(water ? 'waves' : 'land') + '</span><h2>' + (water ? 'On the water' : 'On land') + '</h2></div>' +
+        '<div class="hero-date">' + fmtDate(t) + ' · Today’s practice, ' + S.practice(t).label + (pr ? '<span class="badge">' + (pr.by === 'model' ? icon('cpu') + 'AI model' : 'Starter rules') + '</span>' : '') +
+          (!e || !e.outcome ? '<button class="plan-link" data-plan="' + t + '">' + icon(plan === 'land' ? 'land' : plan === 'split' ? 'split' : 'calPlus') + (plan ? PLAN_TEXT[plan] : 'Set plan') + '</button>' : '') + '</div>' +
+        (plan === 'land' ? '<div class="verdict"><span class="verdict-icon">' + icon('land') + '</span><h2>On land (planned)</h2></div>' +
+          '<p class="verdict-sub">A planned land day, not because of the weather.' + (pr ? ' Conditions alone would give a ' + pct(pr.p) + ' chance of rowing.' : '') + '</p>'
+        : plan === 'split' && pr ? '<div class="verdict"><span class="verdict-icon">' + icon('split') + '</span><h2>Half &amp; half</h2></div>' +
+          '<p class="verdict-sub">Water half: <b>' + pct(pr.p) + '</b> chance conditions allow rowing · ' + certaintyWord(cert).toLowerCase() + '</p>' +
+          '<p class="verdict-sub" style="margin-top:4px;font-size:13px">' + acc + '</p>'
+        : pr ? '<div class="verdict"><span class="verdict-icon">' + icon(water ? 'waves' : 'land') + '</span><h2>' + (water ? 'On the water' : 'On land') + '</h2></div>' +
           '<p class="verdict-sub">' + certaintyWord(cert) + ' · ' + pct(pr.p) + ' chance of rowing on the water</p>' +
           '<p class="verdict-sub" style="margin-top:4px;font-size:13px">' + acc + '</p>'
           : '<div class="verdict"><span class="verdict-icon">' + icon('refresh') + '</span><h2 style="font-size:24px">Waiting for weather</h2></div><p class="verdict-sub">' + (syncError ? 'Weather could not be loaded: ' + esc(syncError) : 'Loading the practice-time forecast for Milton Harbor…') + '</p>') +
       '</div>' +
-      (pr ? '<div class="ring" title="Certainty"><svg viewBox="0 0 112 112"><circle class="track" cx="56" cy="56" r="47"/><circle class="prog" cx="56" cy="56" r="47" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + (C * (1 - cert)).toFixed(1) + '"/></svg><div class="ring-label"><b>' + pct(cert) + '</b><span>certainty</span></div></div>' : '') +
+      (pr && plan !== 'land' ? '<div class="ring" title="Certainty"><svg viewBox="0 0 112 112"><circle class="track" cx="56" cy="56" r="47"/><circle class="prog" cx="56" cy="56" r="47" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + (C * (1 - cert)).toFixed(1) + '"/></svg><div class="ring-label"><b>' + pct(cert) + '</b><span>certainty</span></div></div>' : '') +
       '</div>' +
       (w ? '<div class="wx">' +
         wx('thermo', 'Temperature', num(w.tempAvg) + '°F', 'low ' + num(w.tempMin) + '°F, ' + S.practice(t).short) +
@@ -575,10 +628,19 @@
       '</div>' : '') +
       '<div class="log-row"><span class="q">' + (e && e.outcome ? 'Logged for today' : 'How did practice go today?') + '</span>' +
         '<button class="btn btn-water' + (e && e.outcome === 'water' ? ' on' : '') + '" data-log="water">' + icon('waves') + 'On the water</button>' +
+        '<button class="btn btn-split' + (e && e.outcome === 'split' ? ' on' : '') + '" data-log="split" title="Half on the water, half on land">' + icon('split') + 'Half & half</button>' +
         '<button class="btn btn-land' + (e && e.outcome === 'land' ? ' on' : '') + '" data-log="land">' + icon('land') + 'On land</button>' +
         '<button class="btn btn-ghost' + (e && e.outcome === 'none' ? ' on' : '') + '" data-log="none" title="Practice cancelled. Not used for training.">No practice</button>' +
       '</div>' +
-      (e && e.outcome === 'water' ? rateRow(t, e) : '');
+      (e && e.outcome === 'land' ? whyRow(t, e) : '') +
+      (onWater(e) ? rateRow(t, e) : '');
+  }
+  // After logging a land day: was it the weather, or a planned land day?
+  function whyRow(d, e) {
+    var why = e.landWhy === 'planned' ? 'planned' : 'weather';
+    return '<div class="rate-row why-row"><span class="q">Why on land?</span>' +
+      '<div class="seg"><button data-why="weather" data-date="' + d + '" aria-pressed="' + (why === 'weather') + '">Because of the weather</button><button data-why="planned" data-date="' + d + '" aria-pressed="' + (why === 'planned') + '">Planned land day</button></div>' +
+      '<span class="rate-label">' + (why === 'planned' ? 'Not used to train the model.' : 'Teaches the model these conditions mean land.') + '</span></div>';
   }
   // 1–5 rating buttons plus a short note, for a day on the water.
   function rateRow(d, e, compact) {
@@ -610,16 +672,19 @@
     var t = S.todayKey(), cards = '';
     for (var k = 1; k <= 7; k++) {
       var d = S.addDays(t, k), w = store.forecast && store.forecast.days[d], pr = predictFor(w);
-      var water = pr && pr.p >= 0.5, dt = dateObj(d);
-      cards += '<div class="day-card" style="--c:' + (pr ? (water ? 'var(--water)' : 'var(--land)') : 'var(--text-3)') + '">' +
+      var water = pr && pr.p >= 0.5, dt = dateObj(d), plan = store.days[d] && store.days[d].plan;
+      var col = plan === 'land' ? 'var(--land)' : plan === 'split' ? 'var(--water)' : pr ? (water ? 'var(--water)' : 'var(--land)') : 'var(--text-3)';
+      var ic = plan === 'land' ? 'land' : plan === 'split' ? 'split' : pr ? (water ? 'waves' : 'land') : 'refresh';
+      var label = plan === 'land' ? 'Planned land' : plan === 'split' ? 'Half · ' + (pr ? pct(pr.p) : '–') : pr ? (water ? 'Water' : 'Land') + ' ' + pct(Math.max(pr.p, 1 - pr.p)) : '–';
+      cards += '<button type="button" class="day-card' + (plan ? ' planned' : '') + '" data-plan="' + d + '" style="--c:' + col + '" title="Set a plan for ' + fmtDate(d) + '">' +
         '<div class="dn">' + (k === 1 ? 'Tomorrow' : DOW[dt.getUTCDay()]) + '</div><div class="dd">' + MON[dt.getUTCMonth()] + ' ' + dt.getUTCDate() + (S.practice(d).id === 'sat' ? ' · AM' : '') + '</div>' +
-        '<div class="di">' + icon(pr ? (water ? 'waves' : 'land') : 'refresh') + '</div>' +
-        '<div class="dp">' + (pr ? (water ? 'Water' : 'Land') + ' ' + pct(Math.max(pr.p, 1 - pr.p)) : '–') + '</div>' +
+        '<div class="di">' + icon(ic) + '</div>' +
+        '<div class="dp">' + label + '</div>' +
         '<div class="dw">' + (w ? num(w.tempAvg) + '° · ' + num(w.windAvg) + ' mph ' + W.compass(w.dir) : 'no forecast') + '</div>' +
-        '<div class="bar" title="Chance of water: ' + (pr ? pct(pr.p) : '–') + '"><span style="width:' + (pr ? pr.p * 100 : 0) + '%"></span></div>' +
-      '</div>';
+        '<div class="bar" title="Chance of water: ' + (pr ? pct(pr.p) : '–') + '"><span style="width:' + (pr && plan !== 'land' ? pr.p * 100 : 0) + '%"></span></div>' +
+      '</button>';
     }
-    el.innerHTML = '<div class="panel-head"><span class="panel-title">Next 7 days <span class="muted">· forecast for practice time</span></span></div><div class="panel-body"><div class="week">' + cards + '</div></div>';
+    el.innerHTML = '<div class="panel-head"><span class="panel-title">Next 7 days <span class="muted">· forecast for practice time · tap a day to plan it</span></span></div><div class="panel-body"><div class="week">' + cards + '</div></div>';
   }
 
   function renderModel() {
@@ -660,6 +725,12 @@
         ' Use <b>Add past days</b> to backfill earlier practices; their weather is fetched automatically.</p>' +
         '<p class="muted" style="font-size:12.5px;margin:10px 0 0">Starter rules lean towards land when wind is over ~10 mph, gusts over ~18 mph, it is below ~45°F, there is little light during practice, or there is rain or thunder.</p>';
     }
+    var planned = 0, none = 0, splits = 0;
+    loggedDates().forEach(function (d) { var e = store.days[d]; if (e.outcome === 'none') none++; else if (e.outcome === 'split') splits++; else if (labelOf(e) === null) planned++; });
+    if (planned || none || splits) body += '<p class="muted" style="font-size:12.5px;margin:12px 0 0">' +
+      [splits ? splits + ' half & half day' + (splits === 1 ? '' : 's') + ' count as water days (the water half went ahead)' : '',
+       planned ? planned + ' planned land day' + (planned === 1 ? ' is' : 's are') + ' left out because ' + (planned === 1 ? 'it wasn’t' : 'they weren’t') + ' a weather decision' : '',
+       none ? none + ' no-practice day' + (none === 1 ? ' is' : 's are') + ' left out' : ''].filter(Boolean).join('. ') + '.</p>';
     var foot = M && M.ready && store.trainedAt ? '<div class="panel-foot">Last trained ' + ago(store.trainedAt) + ' · retrains automatically whenever the data changes</div>' : '';
     el.innerHTML = head + '<div class="panel-body">' + body + '</div>' + foot;
   }
@@ -668,17 +739,19 @@
   var filter = 'all';
   function renderData() {
     var el = $('#dataPanel'); if (!el) return;
-    var all = Object.keys(store.days).sort().reverse();
+    var all = loggedDates().sort().reverse();
     var demo = all.some(function (d) { return store.days[d].demo; });
     var list = all.filter(function (d) {
       var e = store.days[d];
-      if (filter === 'water' || filter === 'land' || filter === 'none') return e.outcome === filter;
+      if (filter === 'water' || filter === 'split' || filter === 'none') return e.outcome === filter;
+      if (filter === 'land') return e.outcome === 'land' && e.landWhy !== 'planned';
+      if (filter === 'planned') return e.outcome === 'land' && e.landWhy === 'planned';
       if (filter === 'off') return e.include === false;
       return true;
     });
     var M = store.model, oof = M && M.ready ? M.oof : {};
     var head = '<div class="panel-head"><span class="panel-title">' + icon('table') + 'Training data <span class="muted">· ' + all.length + ' days</span></span>' +
-      '<div class="panel-actions"><div class="seg" id="filterSeg"><button data-v="all">All</button><button data-v="water">Water</button><button data-v="land">Land</button><button data-v="none">No practice</button><button data-v="off">Excluded</button></div>' +
+      '<div class="panel-actions"><div class="seg" id="filterSeg"><button data-v="all">All</button><button data-v="water">Water</button><button data-v="split">Half & half</button><button data-v="land">Land</button><button data-v="planned">Planned land</button><button data-v="none">No practice</button><button data-v="off">Excluded</button></div>' +
       (demo ? '<button class="btn btn-ghost btn-sm" data-act="clearDemo">Remove demo days</button>' : '') +
       '<button class="btn btn-soft btn-sm" data-act="add">' + icon('plus') + 'Add days</button></div></div>';
     if (!all.length) {
@@ -688,27 +761,30 @@
     }
     var rows = list.map(function (d) {
       var e = store.days[d], w = e.weather || {}, off = e.include === false;
-      var out = e.outcome === 'water' ? '<span class="badge water">' + icon('waves') + 'Water</span>' : e.outcome === 'land' ? '<span class="badge land">' + icon('land') + 'Land</span>' : '<span class="badge">No practice</span>';
-      var held = oof[d] != null ? guess(oof[d], e.outcome) : '<span class="muted">–</span>';
-      var live = e.prediction ? guess(e.prediction.p, e.outcome) : '<span class="muted">–</span>';
+      var out = e.outcome === 'water' ? '<span class="badge water">' + icon('waves') + 'Water</span>'
+        : e.outcome === 'split' ? '<span class="badge split">' + icon('split') + 'Half & half</span>'
+        : e.outcome === 'land' ? (e.landWhy === 'planned' ? '<span class="badge" title="Planned land day, not because of the weather">' + icon('land') + 'Land · planned</span>' : '<span class="badge land" title="On land because of the weather">' + icon('land') + 'Land · weather</span>')
+        : '<span class="badge">No practice</span>';
+      var held = oof[d] != null && labelOf(e) !== null ? guess(oof[d], e) : '<span class="muted">–</span>';
+      var live = e.prediction ? guess(e.prediction.p, e) : '<span class="muted">–</span>';
       var wxNote = !e.weather ? '<span class="badge warn">no weather</span>' : w.source === 'manual' ? ' <span class="muted" title="Entered by hand">✎</span>' : w.provisional ? ' <span class="muted" title="Forecast; replaced with observed weather after the day">~</span>' : '';
       return '<tr data-date="' + d + '" class="' + (off ? 'off' : '') + '">' +
-        '<td><input type="checkbox" data-include ' + (off ? '' : 'checked') + ' ' + (e.outcome === 'none' ? 'disabled title="No-practice days are never used"' : 'title="Use this day for training"') + ' aria-label="Use ' + d + ' for training"></td>' +
+        '<td><input type="checkbox" data-include ' + (off ? '' : 'checked') + ' ' + (labelOf(e) === null ? 'disabled title="No-practice and planned land days are never used for training"' : 'title="Use this day for training"') + ' aria-label="Use ' + d + ' for training"></td>' +
         '<td>' + fmtDate(d) + (e.demo ? '<span class="demo">demo</span>' : '') + '</td><td>' + out + '</td>' +
         '<td class="num">' + num(w.tempAvg) + '°F' + wxNote + '</td><td class="num">' + num(w.windAvg) + '</td><td class="num">' + num(w.gustMax) + '</td>' +
         '<td>' + (w.dir == null ? '–' : W.compass(w.dir)) + '</td><td class="num">' + (w.daylight == null ? '–' : w.daylight + ' + ' + w.twilight) + '</td>' +
         '<td class="num">' + num(w.cloud) + '%</td><td class="num">' + (w.precip ? num(w.precip, 2) : '0') + (w.thunder ? ' ⚡' : '') + '</td>' +
         '<td>' + held + '</td><td>' + live + '</td>' +
-        '<td title="' + esc(e.ratingNote || '') + '">' + (e.rating ? e.rating + '/5' + (e.ratingNote ? ' ✎' : '') : e.outcome === 'water' ? '<span class="muted">–</span>' : '') + '</td>' +
+        '<td title="' + esc(e.ratingNote || '') + '">' + (e.rating ? e.rating + '/5' + (e.ratingNote ? ' ✎' : '') : onWater(e) ? '<span class="muted">–</span>' : '') + '</td>' +
         '<td style="text-align:right"><button class="icon-btn sm" data-edit aria-label="Edit ' + d + '">' + icon('edit') + '</button><button class="icon-btn sm danger" data-del aria-label="Delete ' + d + '">' + icon('trash') + '</button></td></tr>';
     }).join('');
     el.innerHTML = head + '<div class="table-wrap"><table class="data"><thead><tr><th title="Use for training">Use</th><th>Date</th><th>Practice</th><th>Temp</th><th>Wind mph</th><th>Gusts</th><th>From</th><th title="Minutes of daylight + twilight during practice">Light min</th><th>Clouds</th><th>Rain in</th><th title="Prediction from a model that did not see this day (cross-validation)">Held-out guess</th><th title="The prediction shown on the day, before practice">Live guess</th><th title="Conditions on the water, 1–5">Cond.</th><th></th></tr></thead><tbody>' +
       (rows || '<tr><td colspan="14" class="muted" style="text-align:center;padding:20px">No days match this filter.</td></tr>') + '</tbody></table></div>' +
-      '<div class="panel-foot">Uncheck <b style="color:var(--text-2)">Use</b> to leave a day out of training without deleting it. Weather is for practice hours (6–8 PM; Saturdays 10 AM–12 PM). Light is minutes of daylight + twilight during practice.</div>';
+      '<div class="panel-foot">Uncheck <b style="color:var(--text-2)">Use</b> to leave a day out of training without deleting it. Half & half days count as water; planned land days are never used. Weather is for practice hours (6–8 PM; Saturdays 10 AM–12 PM). Light is minutes of daylight + twilight during practice.</div>';
     bindFilter();
   }
-  function guess(p, outcome) {
-    var w = p >= 0.5, right = outcome === 'water' ? w : outcome === 'land' ? !w : null;
+  function guess(p, e) {
+    var y = labelOf(e), w = p >= 0.5, right = y === null ? null : w === (y === 1);
     return '<span class="badge ' + (right == null ? '' : right ? 'ok' : 'bad') + '">' + (w ? 'Water' : 'Land') + ' ' + pct(Math.max(p, 1 - p)) + (right == null ? '' : right ? ' ✓' : ' ✗') + '</span>';
   }
   function bindFilter() { var s = $('#filterSeg'); if (s) seg(s, filter, function (v) { filter = v; renderData(); }); }
@@ -717,7 +793,7 @@
   function renderConditions() {
     var el = $('#condView'); if (!el || el.hidden) return;
     var t = S.todayKey(), w = weatherFor(t), e = store.days[t];
-    var waterDays = Object.keys(store.days).filter(function (d) { return store.days[d].outcome === 'water'; }).sort().reverse();
+    var waterDays = Object.keys(store.days).filter(function (d) { return onWater(store.days[d]); }).sort().reverse();
     var ratedN = waterDays.filter(function (d) { return store.days[d].rating; }).length;
     var html = '<div class="grid-2">';
 
@@ -753,8 +829,8 @@
       if (others.length) html += '<div class="others"><span class="section-label" style="margin:0">Also similar</span>' + others.map(function (m) {
         return '<span class="chip-day" title="' + esc(m.entry.ratingNote || '') + '">' + fmtDate(m.date) + ' · ' + Math.round(m.sim * 100) + '%' + (m.entry.rating ? ' · ' + m.entry.rating + '/5' : '') + '</span>';
       }).join('') + '</div>';
-      if (e && e.outcome === 'water') html += rateRow(t, e);
-      else if (!e) html += '<div class="log-row"><span class="q">Went out today?</span><button class="btn btn-water" data-log="water">' + icon('waves') + 'On the water</button><button class="btn btn-land" data-log="land">' + icon('land') + 'On land</button></div>';
+      if (onWater(e)) html += rateRow(t, e);
+      else if (!e || !e.outcome) html += '<div class="log-row"><span class="q">Went out today?</span><button class="btn btn-water" data-log="water">' + icon('waves') + 'On the water</button><button class="btn btn-split" data-log="split">' + icon('split') + 'Half & half</button><button class="btn btn-land" data-log="land">' + icon('land') + 'On land</button></div>';
     }
     html += '</section>';
 
@@ -778,7 +854,7 @@
     else html += '<div class="table-wrap"><table class="data cond"><thead><tr><th>Date</th><th>Rating</th><th>Note</th><th>Wind</th><th>Gusts</th><th>From</th><th>Temp</th><th>Light</th>' + (w ? '<th title="How similar this day was to today">Like today</th>' : '') + '</tr></thead><tbody>' +
       waterDays.map(function (d) {
         var en = store.days[d], ww = en.weather || {};
-        return '<tr data-date="' + d + '"><td>' + fmtDate(d) + '</td><td>' + rateRow(d, en, true) + '</td>' +
+        return '<tr data-date="' + d + '"><td>' + fmtDate(d) + (en.outcome === 'split' ? ' <span class="badge split" title="Half & half">½</span>' : '') + '</td><td>' + rateRow(d, en, true) + '</td>' +
           '<td><input class="text-input sm" data-rnote="' + d + '" maxlength="140" value="' + esc(en.ratingNote || '') + '" placeholder="Add a note" style="min-width:200px" aria-label="Note for ' + d + '"></td>' +
           '<td class="num">' + num(ww.windAvg) + '</td><td class="num">' + num(ww.gustMax) + '</td><td>' + (ww.dir == null ? '–' : W.compass(ww.dir)) + '</td><td class="num">' + num(ww.tempAvg) + '°</td>' +
           '<td class="num">' + (ww.daylight == null ? '–' : ww.daylight + ' + ' + ww.twilight) + '</td>' +
@@ -814,6 +890,15 @@
     }
     var lg = e.target.closest('[data-log]');
     if (lg) { logOutcome(S.todayKey(), lg.dataset.log); return; }
+    var wy = e.target.closest('[data-why]');
+    if (wy) {
+      var wd = store.days[wy.dataset.date]; if (!wd) return;
+      wd.landWhy = wy.dataset.why; save(); renderAll(); retrainSoon();
+      toast(wy.dataset.why === 'planned' ? 'Marked as a planned land day. It won’t be used for training.' : 'Marked as land because of the weather');
+      return;
+    }
+    var pl = e.target.closest('[data-plan]');
+    if (pl) { planDialog(pl.dataset.plan); return; }
     var a = e.target.closest('[data-act]');
     if (a) {
       var act = a.dataset.act;
@@ -873,11 +958,11 @@
   }
 
   function exportCsv() {
-    var cols = ['date', 'outcome', 'used_for_training', 'temp_avg_f', 'temp_min_f', 'wind_avg_mph', 'gust_max_mph', 'wind_dir_deg', 'wind_from', 'daylight_min', 'twilight_min', 'cloud_pct', 'rain_in', 'thunder', 'weather_source', 'live_prediction_water_pct', 'heldout_prediction_water_pct', 'conditions_rating', 'conditions_note', 'note'];
+    var cols = ['date', 'outcome', 'land_reason', 'used_for_training', 'temp_avg_f', 'temp_min_f', 'wind_avg_mph', 'gust_max_mph', 'wind_dir_deg', 'wind_from', 'daylight_min', 'twilight_min', 'cloud_pct', 'rain_in', 'thunder', 'weather_source', 'live_prediction_water_pct', 'heldout_prediction_water_pct', 'conditions_rating', 'conditions_note', 'note'];
     var oof = store.model && store.model.ready ? store.model.oof : {};
-    var lines = [cols.join(',')].concat(Object.keys(store.days).sort().map(function (d) {
+    var lines = [cols.join(',')].concat(loggedDates().sort().map(function (d) {
       var e = store.days[d], w = e.weather || {};
-      return [d, e.outcome, e.include !== false && e.outcome !== 'none', w.tempAvg, w.tempMin, w.windAvg, w.gustMax, w.dir, w.dir == null ? '' : W.compass(w.dir), w.daylight, w.twilight, w.cloud, w.precip, w.thunder, w.source,
+      return [d, e.outcome, e.outcome === 'land' ? (e.landWhy || 'weather') : '', e.include !== false && labelOf(e) !== null, w.tempAvg, w.tempMin, w.windAvg, w.gustMax, w.dir, w.dir == null ? '' : W.compass(w.dir), w.daylight, w.twilight, w.cloud, w.precip, w.thunder, w.source,
         e.prediction ? Math.round(e.prediction.p * 100) : '', oof[d] != null ? Math.round(oof[d] * 100) : '', e.rating || '', e.ratingNote || '', e.note || '']
         .map(function (v) { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(',');
     }));
@@ -905,12 +990,12 @@
   function addDaysDialog() {
     var t = S.todayKey();
     var body = h('<div>' +
-      '<p class="confirm-text">Pick a date range, then mark each day. Weather and light are filled in automatically for Milton Harbor.</p>' +
+      '<p class="confirm-text">Pick a date range, then mark each day. <b>Land</b> means the weather kept you off the water; <b>Planned land</b> means a land day for its own sake (not used for training); <b>Half</b> is half & half. Weather and light are filled in automatically.</p>' +
       '<div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
         '<div><label class="form-label" for="from">From</label><input class="text-input" type="date" id="from" max="' + t + '" value="' + S.addDays(t, -7) + '"></div>' +
         '<div><label class="form-label" for="to">To</label><input class="text-input" type="date" id="to" max="' + t + '" value="' + S.addDays(t, -1) + '"></div></div>' +
       '<div class="form-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="form-label" style="margin:0">Set all to</span>' +
-        '<button type="button" class="btn btn-ghost btn-sm" data-all="water">Water</button><button type="button" class="btn btn-ghost btn-sm" data-all="land">Land</button><button type="button" class="btn btn-ghost btn-sm" data-all="none">No practice</button><button type="button" class="btn btn-ghost btn-sm" data-all="skip">Skip</button>' +
+        '<button type="button" class="btn btn-ghost btn-sm" data-all="water">Water</button><button type="button" class="btn btn-ghost btn-sm" data-all="split">Half</button><button type="button" class="btn btn-ghost btn-sm" data-all="land">Land</button><button type="button" class="btn btn-ghost btn-sm" data-all="planned">Planned land</button><button type="button" class="btn btn-ghost btn-sm" data-all="none">No practice</button><button type="button" class="btn btn-ghost btn-sm" data-all="skip">Skip</button>' +
         '<label class="check-label" style="margin-left:auto"><input type="checkbox" id="wkends">Skip weekends</label></div>' +
       '<div class="bulk" id="bulk"></div></div>');
     var from = $('#from', body), to = $('#to', body), list = $('#bulk', body), wk = $('#wkends', body);
@@ -926,14 +1011,13 @@
     function paint() {
       var ds = dates();
       list.innerHTML = ds.map(function (d) {
-        var cur = store.days[d], wkend = [0, 6].indexOf(dateObj(d).getUTCDay()) !== -1;
-        var v = choice[d] || (cur ? cur.outcome : (wk.checked && wkend ? 'skip' : 'skip'));
-        return '<div class="bulk-row" data-d="' + d + '"><span class="d">' + fmtDate(d) + (cur ? '<small>logged: ' + (cur.outcome === 'none' ? 'no practice' : cur.outcome) + '</small>' : '') + '</span>' +
-          '<div class="seg"><button data-v="water">Water</button><button data-v="land">Land</button><button data-v="none">None</button><button data-v="skip">Skip</button></div></div>';
+        var cur = store.days[d] && store.days[d].outcome ? store.days[d] : null;
+        return '<div class="bulk-row" data-d="' + d + '"><span class="d">' + fmtDate(d) + (cur ? '<small>logged: ' + outcomeText(cur) + '</small>' : '') + '</span>' +
+          '<div class="seg"><button data-v="water">Water</button><button data-v="split">Half</button><button data-v="land">Land</button><button data-v="planned" title="Planned land day (not weather)">Planned</button><button data-v="none">None</button><button data-v="skip">Skip</button></div></div>';
       }).join('') || '<div class="muted" style="padding:14px;text-align:center">Pick a range of past dates.</div>';
       $$('.bulk-row', list).forEach(function (row) {
-        var d = row.dataset.d, cur = store.days[d], wkend = [0, 6].indexOf(dateObj(d).getUTCDay()) !== -1;
-        var v = choice[d] || (cur ? cur.outcome : 'skip');
+        var d = row.dataset.d, cur = store.days[d] && store.days[d].outcome ? store.days[d] : null, wkend = [0, 6].indexOf(dateObj(d).getUTCDay()) !== -1;
+        var v = choice[d] || (cur ? (cur.outcome === 'land' && cur.landWhy === 'planned' ? 'planned' : cur.outcome) : 'skip');
         if (!choice[d] && !cur && wk.checked && wkend) v = 'skip';
         seg($('.seg', row), v, function (nv) { choice[d] = nv; });
       });
@@ -956,10 +1040,12 @@
           var v = choice[d];
           if (v === 'skip') { return; }
           var e = store.days[d] || { include: true };
-          e.outcome = v; e.loggedAt = Date.now();
+          if (e.include == null) e.include = true;
+          e.outcome = v === 'planned' ? 'land' : v; e.loggedAt = Date.now();
+          if (e.outcome === 'land') e.landWhy = v === 'planned' ? 'planned' : 'weather'; else delete e.landWhy;
           store.days[d] = e; n++;
         });
-        if (!n) { toast('Mark at least one day as Water, Land or None'); return false; }
+        if (!n) { toast('Mark at least one day (anything other than Skip)'); return false; }
         save(); renderAll();
         toast('Saved ' + n + ' day' + (n === 1 ? '' : 's') + '. Fetching their weather…');
         sync().then(function () { maybeRetrain(); });
@@ -976,7 +1062,9 @@
     var e = store.days[d], w = Object.assign({}, e.weather || W.lightOnly(d));
     var L2 = S.light(d);
     var body = h('<div>' +
-      '<div class="form-row"><span class="form-label">Practice</span><div class="seg" id="eo"><button data-v="water">On the water</button><button data-v="land">On land</button><button data-v="none">No practice</button></div></div>' +
+      '<div class="form-row"><span class="form-label">Practice</span><div class="seg" id="eo"><button data-v="water">On the water</button><button data-v="split">Half & half</button><button data-v="land">On land</button><button data-v="none">No practice</button></div></div>' +
+      '<div class="form-row" id="ewhyRow"><span class="form-label">Why on land?</span><div class="seg" id="ewhy"><button data-v="weather">Because of the weather</button><button data-v="planned">Planned land day</button></div>' +
+        '<p class="muted" style="font-size:12.5px;margin:6px 0 0">Planned land days are never used to train the model.</p></div>' +
       '<div class="form-row"><label class="check-label"><input type="checkbox" id="einc"' + (e.include === false ? '' : ' checked') + '>Use this day for training</label></div>' +
       '<div class="form-row" id="erateRow"><span class="form-label">Conditions on the water</span><div class="seg" id="erate"><button data-v="0">Not rated</button>' + [1, 2, 3, 4, 5].map(function (k) { return '<button data-v="' + k + '" title="' + C.LABELS[k] + '">' + k + '</button>'; }).join('') + '</div>' +
         '<input class="text-input sm" id="ernote" maxlength="140" style="margin-top:8px" placeholder="Short note about the water" value="' + esc(e.ratingNote || '') + '"></div>' +
@@ -988,8 +1076,9 @@
       '<p class="muted" style="font-size:12.5px;margin:10px 0 0">Light (calculated): ' + L2.daylight + ' min daylight + ' + L2.twilight + ' min twilight during ' + S.practice(d).label + (L2.sunset ? ' · sunset ' + L2.sunset : '') + '. Source: ' + (w.source === 'manual' ? 'entered by hand' : w.source ? 'Open-Meteo' + (w.provisional ? ' (forecast)' : '') : 'none yet') + '.</p>' +
       '<div class="form-row"><label class="form-label" for="enote">Note</label><textarea class="text-area" id="enote" rows="2" placeholder="e.g. lightning nearby, coach call">' + esc(e.note || '') + '</textarea></div>' +
       '</div>');
-    var outcome = e.outcome, rating = e.rating || 0;
-    function showRate() { $('#erateRow', body).hidden = outcome !== 'water'; }
+    var outcome = e.outcome, rating = e.rating || 0, why = e.landWhy === 'planned' ? 'planned' : 'weather';
+    function showRate() { $('#erateRow', body).hidden = outcome !== 'water' && outcome !== 'split'; $('#ewhyRow', body).hidden = outcome !== 'land'; }
+    seg($('#ewhy', body), why, function (v) { why = v; });
     seg($('#eo', body), outcome, function (v) { outcome = v; showRate(); });
     seg($('#erate', body), String(rating), function (v) { rating = +v; });
     showRate();
@@ -1018,7 +1107,8 @@
         nw.daylight = L2.daylight; nw.twilight = L2.twilight; nw.sunset = L2.sunset; nw.window = S.practice(d).id;
         if (edited || nw.thunder !== (w.thunder ? 1 : 0)) { nw.source = 'manual'; nw.provisional = false; }
         e.outcome = outcome; e.include = $('#einc', body).checked; e.note = $('#enote', body).value.trim();
-        e.rating = outcome === 'water' && rating ? rating : null; e.ratingNote = $('#ernote', body).value.trim();
+        e.rating = (outcome === 'water' || outcome === 'split') && rating ? rating : null; e.ratingNote = $('#ernote', body).value.trim();
+        if (outcome === 'land') e.landWhy = why; else delete e.landWhy;
         e.weather = nw.tempAvg == null && nw.windAvg == null && !e.weather ? null : nw;
         store.days[d] = e; save(); renderAll(); retrainSoon();
         toast('Saved ' + fmtDate(d));

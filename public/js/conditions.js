@@ -52,7 +52,7 @@
     var out = [];
     Object.keys(days).forEach(function (d) {
       var e = days[d];
-      if (d === exclude || e.outcome !== 'water' || !e.weather || e.weather.windAvg == null) return;
+      if (d === exclude || (e.outcome !== 'water' && e.outcome !== 'split') || !e.weather || e.weather.windAvg == null) return;
       out.push({ date: d, sim: similarity(w, e.weather), entry: e });
     });
     return out.sort(function (a, b) { return b.sim - a.sim || (b.entry.rating ? 1 : 0) - (a.entry.rating ? 1 : 0); });

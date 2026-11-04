@@ -19,6 +19,7 @@ A second view, **Conditions**, lets you rate how it was on the water from 1 to 5
 
 - [Quick start](#quick-start)
 - [Daily use](#daily-use)
+- [Land days, half & half, and plans](#land-days-half--half-and-plans)
 - [What the model looks at](#what-the-model-looks-at)
 - [Accuracy and certainty](#accuracy-and-certainty)
 - [How the AI model works](#how-the-ai-model-works)
@@ -69,7 +70,7 @@ Then open http://localhost:8787. It uses a local copy of the Durable Object, sep
 ## Daily use
 
 1. Open the app. It refreshes the forecast for today's practice window and for the next 7 days, and shows the prediction. Saturdays use the morning window and are marked "AM" in the 7-day strip.
-2. After practice, tap **On the water**, **On land** or **No practice** on the main card. On water days, also tap a **1–5 rating** for how it was and add a short note.
+2. After practice, tap **On the water**, **Half & half**, **On land** or **No practice** on the main card. After **On land**, pick **Because of the weather** or **Planned land day**. On water days, also tap a **1–5 rating** for how it was and add a short note.
 3. That's it. The app does the rest:
    - stores today's weather with your answer
    - replaces the forecast with the observed weather the next time you open it (forecast days show a `~` until then)
@@ -77,6 +78,34 @@ Then open http://localhost:8787. It uses a local copy of the Durable Object, sep
    - records how its pre-practice prediction compared with what happened
 
 Forgot a day? Use **Add past days**, or edit any row in the data table.
+
+---
+
+## Land days, half & half, and plans
+
+Not every land practice is about the weather, and some practices are both. The app tracks four kinds of practice:
+
+| Practice | What it means | How the model uses it |
+| --- | --- | --- |
+| **On the water** | The whole practice rowed | Water |
+| **Half & half** | Half the team rows while the other half is on land, then they swap | Water: the water half went ahead, so conditions allowed rowing |
+| **On land, because of the weather** | Wind, cold, dark, rain or storms kept the team off the water | Land |
+| **Planned land day** | A land practice for its own sake (erg test, circuit, team day) | **Not used**, since it says nothing about the weather |
+| **No practice** | Cancelled | Not used |
+
+**Planning ahead:** tap any day in **Next 7 days**, or **Set plan** on today's card, to mark it:
+- **Weather decides:** the default.
+- **Planned land day:** today's card shows *On land (planned)* and, for reference, the chance conditions alone would have allowed rowing.
+- **Half & half:** the card shows the chance the **water half** can go ahead, with its certainty.
+
+Planned days get a dashed outline in the 7-day strip. When you later log a day that was planned as land, **On land** defaults to *Planned land day*. You can switch it with one tap (*Why on land?*), or later in the edit dialog.
+
+**Where these show up:**
+- **Training data table:** filters for each kind, with badges *Half & half*, *Land · weather* and *Land · planned*. The **Use** box is greyed out for planned land and no-practice days, because they're never used.
+- **Model panel:** a note says how many half & half days count as water and how many planned land days were left out.
+- **Live record:** only days that are weather decisions count.
+- **Conditions view:** half & half days are water days, so you can rate how the water half went.
+- **CSV export:** outcome `split` for half & half, and a `land_reason` column (`weather` or `planned`).
 
 ---
 
