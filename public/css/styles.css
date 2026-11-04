@@ -201,7 +201,24 @@ svg.i { width: 18px; height: 18px; flex: none; stroke: currentColor; fill: none;
 .wx-item .s { font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .arrow { display: inline-block; transition: transform .6s var(--ease); }
 .log-row { display: flex; align-items: center; gap: 10px; padding: 14px 22px; border-top: 1px solid var(--border); flex-wrap: wrap; position: relative; }
-.log-row .q { font-weight: 600; font-size: 14px; margin-right: auto; }
+.log-row .q { font-weight: 600; font-size: 14px; flex-basis: 100%; }
+.log-btns { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; width: 100%; }
+.log-btns .btn { width: 100%; padding: 0 10px; }
+.btn-none { color: var(--text-2); background: var(--surface-2); }
+.btn-none:hover { background: var(--border); color: var(--text); }
+.btn-none.on { background: var(--text-2); color: var(--surface); }
+.update-box { border: 1px solid color-mix(in oklch, var(--water) 35%, var(--border)); background: color-mix(in oklch, var(--water) 6%, var(--surface)); border-radius: 12px; padding: 10px 12px; margin-bottom: 14px; font-size: 13px; }
+.update-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.update-head svg.i { width: 14px; height: 14px; color: var(--water); }
+.update-head .muted { margin-left: auto; font-size: 12px; }
+.update-grid { display: grid; grid-template-columns: auto auto auto 1fr; gap: 3px 10px; align-items: baseline; font-variant-numeric: tabular-nums; }
+.update-grid .l { color: var(--text-2); }
+.update-grid .arr { color: var(--text-3); }
+.update-grid .chg { font-size: 12px; font-weight: 600; color: var(--text-3); }
+.update-grid .chg.up { color: var(--ok); }
+.update-grid .chg.down { color: var(--danger); }
+.pulse { animation: pulse 1.4s var(--ease); }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--water) 45%, transparent); } 100% { box-shadow: 0 0 0 14px transparent; } }
 .btn-water { background: color-mix(in oklch, var(--water) 14%, transparent); color: var(--water); }
 .btn-water:hover { background: color-mix(in oklch, var(--water) 22%, transparent); }
 .btn-land { background: color-mix(in oklch, var(--land) 16%, transparent); color: var(--land); }
@@ -388,7 +405,7 @@ button.day-card:active { transform: scale(.98); }
   .verdict h2 { font-size: 25px; }
   .wx { grid-template-columns: repeat(2, 1fr); padding: 0 16px 14px; }
   .log-row { padding: 12px 16px; }
-  .log-row .q { flex-basis: 100%; }
+  .log-btns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .week { grid-template-columns: repeat(3, 1fr); }
   .rate-row { padding: 12px 16px; }
   .match { margin: 0 16px 14px; }

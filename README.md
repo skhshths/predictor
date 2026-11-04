@@ -140,6 +140,7 @@ Light is **calculated from the sun's position** for the boathouse's coordinates 
 ## Accuracy and certainty
 
 - **Certainty** is how sure the model is about one prediction: the model's probability for the outcome it predicts. "On land, 87% certainty" means it gives a 13% chance of rowing on the water. Labels: ≥85% *very confident*, ≥70% *fairly confident*, ≥60% *leaning*, otherwise *toss-up*.
+- **After every change** (logging today, adding past days, editing, excluding or deleting a day), the model retrains on its own. A toast and a **Model updated** box at the top of the model panel then show the before → after accuracy, the number of days trained on, and today's prediction with its certainty. The 7-day forecast and each day's held-out guess refresh at the same time.
 - **Accuracy** is how often the model is right on **days it has not seen**. Every day is predicted by a version of the model trained without that day (cross-validation). This is an honest estimate, not a score on the training data.
 - **Live record** counts the predictions the app actually showed before practice that turned out right. A snapshot is taken whenever the app is opened before practice (before 6 PM, or 10 AM on Saturdays) and frozen once practice starts.
 - **Baseline** is the accuracy of always guessing the most common outcome. A useful model should beat it, and the app tells you whether it does.

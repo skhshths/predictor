@@ -441,6 +441,7 @@
     syncing = false;
     renderAll();
     if (changed) maybeRetrain();
+    else if (announce && !training) showUpdate();
   }
 
   /* ---------- Training ---------- */
@@ -455,9 +456,20 @@
       return w;
     } catch (e) { return null; }
   }
+  // Snapshot of accuracy and today's prediction, to show what a retrain changed.
+  function modelSummary() {
+    var M = store.model, t = S.todayKey(), pr = predictFor(weatherFor(t));
+    return {
+      ready: !!(M && M.ready), acc: M && M.ready ? M.cv.acc : null, n: M && M.ready ? M.cv.n : trainingRows().length,
+      p: pr ? pr.p : null, by: pr ? pr.by : null
+    };
+  }
+  var announce = false, before = null;
+  function userChanged() { if (!announce) { announce = true; before = modelSummary(); } }
+
   function maybeRetrain(force) {
     var rows = trainingRows(), sig = signature(rows);
-    if (!force && store.model && store.trainedOn === sig) return;
+    if (!force && store.model && store.trainedOn === sig) { if (announce && !syncing) showUpdate(); return; }
     if (training) { trainWanted = true; return; }
     training = true; trainWanted = false;
     var id = ++trainId;
@@ -476,13 +488,45 @@
     store.model = m.result; store.trainedAt = Date.now(); store.trainedOn = pending.sig;
     snapshot(); save();
     renderAll();
+    if (announce && !syncing && !trainWanted) showUpdate();
     if (manualTrain) {
       manualTrain = false;
       toast(m.result.ready ? 'Retrained on ' + m.result.cv.n + ' days. Accuracy ' + pct(m.result.cv.acc) + ' on days it hadn’t seen.' : 'Not enough data to train yet. Using starter rules.');
     }
     if (trainWanted) maybeRetrain();
   }
-  var retrainSoon = debounce(function () { maybeRetrain(); }, 500);
+  var retrainSoonInner = debounce(function () { maybeRetrain(); }, 500);
+  function retrainSoon() { userChanged(); retrainSoonInner(); }
+
+  // Tell the user what the latest retrain changed: accuracy and today's prediction.
+  function showUpdate() {
+    announce = false;
+    var a = modelSummary(), b = before || {};
+    before = null;
+    store.lastUpdate = { at: Date.now(), before: b, after: a };
+    save(); renderModel(); renderHero();
+    var hero = $('#hero'); if (hero) { hero.classList.remove('pulse'); void hero.offsetWidth; hero.classList.add('pulse'); }
+    var mp = $('#modelPanel'); if (mp) { mp.classList.remove('pulse'); void mp.offsetWidth; mp.classList.add('pulse'); }
+    var acc = a.ready ? 'accuracy ' + pct(a.acc) + (b.ready && b.acc != null ? ' (' + delta(a.acc, b.acc) + ')' : '') : 'starter rules (not enough data yet)';
+    var today = a.p != null ? ' · Today: ' + (a.p >= 0.5 ? 'water' : 'land') + ', ' + pct(Math.max(a.p, 1 - a.p)) + ' certainty' : '';
+    toast('Model updated on ' + a.n + ' days: ' + acc + today, { duration: 6000 });
+  }
+  function delta(x, y) {
+    var d = Math.round((x - y) * 100);
+    return d === 0 ? 'no change' : (d > 0 ? '+' : '−') + Math.abs(d) + ' pts';
+  }
+  function updateBox() {
+    var u = store.lastUpdate;
+    if (!u || Date.now() - u.at > 6 * 3600 * 1000) return '';
+    var a = u.after, b = u.before || {};
+    function side(p) { return p == null ? '–' : (p >= 0.5 ? 'Water' : 'Land') + ' · ' + pct(Math.max(p, 1 - p)); }
+    return '<div class="update-box"><div class="update-head">' + icon('refresh') + '<b>Model updated</b><span class="muted">' + ago(u.at) + '</span></div>' +
+      '<div class="update-grid">' +
+        '<span class="l">Accuracy</span><span>' + (b.acc != null ? pct(b.acc) : '–') + '</span><span class="arr">→</span><span><b>' + (a.acc != null ? pct(a.acc) : 'starter rules') + '</b>' + (a.acc != null && b.acc != null ? ' <span class="chg ' + (a.acc > b.acc ? 'up' : a.acc < b.acc ? 'down' : '') + '">' + delta(a.acc, b.acc) + '</span>' : '') + '</span>' +
+        '<span class="l">Days trained on</span><span>' + (b.n != null ? b.n : '–') + '</span><span class="arr">→</span><span><b>' + a.n + '</b></span>' +
+        '<span class="l">Today (certainty)</span><span>' + side(b.p) + '</span><span class="arr">→</span><span><b>' + side(a.p) + '</b></span>' +
+      '</div></div>';
+  }
 
   /* ---------- Logging ---------- */
   function logOutcome(date, outcome, why) {
@@ -627,11 +671,12 @@
         wx('rain', 'Sky', (w.thunder ? 'Storms' : num(w.cloud) + '% cloud'), (w.precip ? num(w.precip, 2) + ' in rain' : 'no rain') ) +
       '</div>' : '') +
       '<div class="log-row"><span class="q">' + (e && e.outcome ? 'Logged for today' : 'How did practice go today?') + '</span>' +
+        '<div class="log-btns">' +
         '<button class="btn btn-water' + (e && e.outcome === 'water' ? ' on' : '') + '" data-log="water">' + icon('waves') + 'On the water</button>' +
         '<button class="btn btn-split' + (e && e.outcome === 'split' ? ' on' : '') + '" data-log="split" title="Half on the water, half on land">' + icon('split') + 'Half & half</button>' +
         '<button class="btn btn-land' + (e && e.outcome === 'land' ? ' on' : '') + '" data-log="land">' + icon('land') + 'On land</button>' +
-        '<button class="btn btn-ghost' + (e && e.outcome === 'none' ? ' on' : '') + '" data-log="none" title="Practice cancelled. Not used for training.">No practice</button>' +
-      '</div>' +
+        '<button class="btn btn-none' + (e && e.outcome === 'none' ? ' on' : '') + '" data-log="none" title="Practice cancelled. Not used for training.">No practice</button>' +
+      '</div></div>' +
       (e && e.outcome === 'land' ? whyRow(t, e) : '') +
       (onWater(e) ? rateRow(t, e) : '');
   }
@@ -694,7 +739,7 @@
     var water = rows.filter(function (r) { return r.y === 1; }).length, land = rows.length - water;
     var head = '<div class="panel-head"><span class="panel-title">' + icon('cpu') + 'Model</span><div class="panel-actions">' +
       (training ? '<span class="training"><span class="spinner"></span>Training…</span>' : '<button class="btn btn-soft btn-sm" data-act="retrain">' + icon('refresh') + 'Retrain</button>') + '</div></div>';
-    var body = '';
+    var body = updateBox();
     if (M && M.ready) {
       body += '<div class="stats">' +
         stat('Accuracy', pct(M.cv.acc), M.cv.correct + ' of ' + M.cv.n + ' unseen days right') +
@@ -830,7 +875,7 @@
         return '<span class="chip-day" title="' + esc(m.entry.ratingNote || '') + '">' + fmtDate(m.date) + ' · ' + Math.round(m.sim * 100) + '%' + (m.entry.rating ? ' · ' + m.entry.rating + '/5' : '') + '</span>';
       }).join('') + '</div>';
       if (onWater(e)) html += rateRow(t, e);
-      else if (!e || !e.outcome) html += '<div class="log-row"><span class="q">Went out today?</span><button class="btn btn-water" data-log="water">' + icon('waves') + 'On the water</button><button class="btn btn-split" data-log="split">' + icon('split') + 'Half & half</button><button class="btn btn-land" data-log="land">' + icon('land') + 'On land</button></div>';
+      else if (!e || !e.outcome) html += '<div class="log-row"><span class="q">Went out today?</span><div class="log-btns"><button class="btn btn-water" data-log="water">' + icon('waves') + 'On the water</button><button class="btn btn-split" data-log="split">' + icon('split') + 'Half & half</button><button class="btn btn-land" data-log="land">' + icon('land') + 'On land</button></div></div>';
     }
     html += '</section>';
 
@@ -1048,6 +1093,7 @@
         if (!n) { toast('Mark at least one day (anything other than Skip)'); return false; }
         save(); renderAll();
         toast('Saved ' + n + ' day' + (n === 1 ? '' : 's') + '. Fetching their weather…');
+        userChanged();
         sync().then(function () { maybeRetrain(); });
       } }
     ] });
