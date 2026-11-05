@@ -193,12 +193,12 @@ svg.i { width: 18px; height: 18px; flex: none; stroke: currentColor; fill: none;
 .ring-label b { font-size: 26px; letter-spacing: -.03em; line-height: 1; }
 .ring-label span { font-size: 11.5px; color: var(--text-3); margin-top: 3px; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
-.wx { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; padding: 0 22px 18px; position: relative; }
+.wx { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; padding: 0 22px 18px; position: relative; }
 .wx-item { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; min-width: 0; }
 .wx-item .l { font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 6px; }
 .wx-item .l svg.i { width: 14px; height: 14px; }
-.wx-item .v { font-size: 18px; font-weight: 600; letter-spacing: -.02em; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.wx-item .s { font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wx-item .v { font-size: 18px; font-weight: 600; letter-spacing: -.02em; margin-top: 2px; line-height: 1.25; overflow-wrap: anywhere; }
+.wx-item .s { font-size: 12px; color: var(--text-3); line-height: 1.35; margin-top: 2px; }
 .arrow { display: inline-block; transition: transform .6s var(--ease); }
 .log-row { display: flex; align-items: center; gap: 10px; padding: 14px 22px; border-top: 1px solid var(--border); flex-wrap: wrap; position: relative; }
 .log-row .q { font-weight: 600; font-size: 14px; flex-basis: 100%; }
@@ -390,7 +390,6 @@ button.day-card:active { transform: scale(.98); }
 /* ---------- Responsive ---------- */
 @media (max-width: 900px) {
   .grid-2 { grid-template-columns: 1fr; }
-  .wx { grid-template-columns: repeat(3, 1fr); }
   .week { grid-template-columns: repeat(4, 1fr); }
 }
 @media (max-width: 600px) {
@@ -404,6 +403,7 @@ button.day-card:active { transform: scale(.98); }
   .verdict { padding-right: 96px; }
   .verdict h2 { font-size: 25px; }
   .wx { grid-template-columns: repeat(2, 1fr); padding: 0 16px 14px; }
+  .wx-item:last-child:nth-child(odd) { grid-column: 1 / -1; }
   .log-row { padding: 12px 16px; }
   .log-btns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .week { grid-template-columns: repeat(3, 1fr); }

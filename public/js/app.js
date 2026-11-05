@@ -646,7 +646,7 @@
       : 'Using starter rules until you log ' + L.MIN_DAYS + '+ days with at least ' + L.MIN_EACH + ' of each';
     var C = 2 * Math.PI * 47;
     var light = S.light(t);
-    var lightTxt = light.daylight >= light.window ? 'Daylight all practice' : light.daylight > 0 ? light.daylight + ' min of daylight' : light.twilight > 0 ? 'Dark after ' + light.twilight + ' min of twilight' : 'Dark the whole practice';
+    var lightTxt = light.daylight >= light.window ? 'Daylight all practice' : light.daylight > 0 ? light.daylight + ' min of daylight' : light.twilight > 0 ? 'Dark after ' + light.twilight + ' min of twilight' : 'Dark all practice';
     el.innerHTML =
       '<div class="hero-body"><div>' +
         '<div class="hero-date">' + fmtDate(t) + ' · Today’s practice, ' + S.practice(t).label + (pr ? '<span class="badge">' + (pr.by === 'model' ? icon('cpu') + 'AI model' : 'Starter rules') + '</span>' : '') +
@@ -668,7 +668,7 @@
         wx('wind', 'Wind', num(w.windAvg) + ' mph', 'gusts ' + num(w.gustMax) + ' mph') +
         wx('up', 'Direction', (w.dir == null ? '–' : '<span class="arrow" style="transform:rotate(' + ((w.dir + 180) % 360) + 'deg)">↑</span> ' + W.compass(w.dir)), w.dir == null ? '' : 'from ' + w.dir + '°') +
         wx('sunset', 'Light', light.daylight + light.twilight + ' min', lightTxt + (light.sunset ? ' · sunset ' + light.sunset : '')) +
-        wx('rain', 'Sky', (w.thunder ? 'Storms' : num(w.cloud) + '% cloud'), (w.precip ? num(w.precip, 2) + ' in rain' : 'no rain') ) +
+        wx('rain', 'Sky', (w.thunder ? 'Storms' : num(w.cloud) + '%'), (w.thunder ? '' : 'cloud cover · ') + (w.precip ? num(w.precip, 2) + ' in rain' : 'no rain')) +
       '</div>' : '') +
       '<div class="log-row"><span class="q">' + (e && e.outcome ? 'Logged for today' : 'How did practice go today?') + '</span>' +
         '<div class="log-btns">' +
