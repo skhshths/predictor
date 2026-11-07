@@ -1,7 +1,7 @@
 /* =========================================================================
    Conditions: 1–5 ratings of how it was on the water, "most similar day"
-   matching, and an estimate of what a day might feel like when no logged
-   day is close enough.
+   matching, and a plain forecast summary when no logged day is close
+   enough.
 
    Similarity compares the practice-time weather of two days feature by feature,
    using natural scales (e.g. 5 mph of wind ≈ 10 °F of temperature in
@@ -69,7 +69,7 @@
     return 'cross';
   }
 
-  // A physics-flavoured guess at a 1–5 rating from the weather alone.
+  // A rough 1–5 rating estimated from the weather alone.
   function heuristic(w) {
     var wind = n(w.windAvg) || 0, gust = n(w.gustMax) || wind, t = n(w.tempAvg), light = n(w.daylight) != null ? n(w.daylight) + (n(w.twilight) || 0) : null;
     var r = 5 - Math.max(0, wind - 5) * 0.2 - Math.max(0, gust - 14) * 0.06;
@@ -98,36 +98,33 @@
 
   function round(v) { return Math.round(v); }
 
-  // Plain-English "what it might feel like" for a day.
+  // Plain summary of the forecast for a day, used when no logged day is similar.
   function describe(w, dateKey) {
     var lines = [], wind = n(w.windAvg), gust = n(w.gustMax), t = n(w.tempAvg), tl = n(w.tempMin), dir = n(w.dir);
     var ex = exposure(dir), from = dir == null ? '' : ' from the ' + compassFrom(dir);
-    var surface;
-    if (wind == null) surface = 'Wind unknown.';
-    else if (wind < 5) surface = 'Close to glassy: barely any wind' + from + '.';
-    else if (wind < 9) surface = 'Light ripples to light chop with ' + round(wind) + ' mph' + from + '.';
-    else if (wind < 13) surface = 'Steady chop with ' + round(wind) + ' mph' + from + '; expect spray on the catch.';
-    else if (wind < 18) surface = 'Rough: ' + round(wind) + ' mph' + from + ' should build whitecaps in open water.';
-    else surface = 'Very rough: ' + round(wind) + ' mph' + from + '. Whitecaps and big rolling water outside the harbor.';
-    lines.push(surface);
-    if (wind != null && wind >= 6) {
-      if (ex === 'sound') lines.push('The wind blows straight up Milton Harbor off the Sound, so waves have room to build, worst near the harbor mouth.');
-      else if (ex === 'offshore') lines.push('An offshore breeze: calmer near the boathouse and in the lee of the shore, choppier the farther out you row.');
-      else if (ex === 'cross') lines.push('A crosswind across the harbor: steering will take work and the water gets bumpier out in the open.');
+    if (wind == null) lines.push('Wind: no data.');
+    else {
+      var strength = wind < 5 ? 'Calm' : wind < 9 ? 'Light' : wind < 13 ? 'Moderate' : wind < 18 ? 'Strong' : 'Very strong';
+      lines.push(strength + ' wind: ' + round(wind) + ' mph' + from + '.');
     }
-    if (gust != null && wind != null && gust - wind >= 8) lines.push('Gusty: sudden puffs to about ' + round(gust) + ' mph.');
+    if (wind != null && wind >= 6) {
+      if (ex === 'sound') lines.push('Blows up the harbor from Long Island Sound, so water is usually rougher near the harbor mouth.');
+      else if (ex === 'offshore') lines.push('Blows off the land, so water is usually calmer near the boathouse than farther out.');
+      else if (ex === 'cross') lines.push('Blows across the harbor.');
+    }
+    if (gust != null && wind != null && gust - wind >= 8) lines.push('Gusts to ' + round(gust) + ' mph.');
     if (t != null) {
       var feel = t < 40 ? 'Cold' : t < 50 ? 'Chilly' : t < 62 ? 'Cool' : t < 75 ? 'Mild' : t < 85 ? 'Warm' : 'Hot';
-      lines.push(feel + ', about ' + round(t) + '°F' + (tl != null && t - tl >= 3 ? ' (low of ' + round(tl) + '°F)' : '') + '.');
+      lines.push(feel + ': ' + round(t) + '°F' + (tl != null && t - tl >= 3 ? ', low ' + round(tl) + '°F' : '') + '.');
     }
     var L = window.Sun.light(dateKey);
-    if (L.daylight >= L.window) lines.push('Daylight the whole practice.');
-    else if (L.daylight > 0) lines.push('Sunset at ' + L.sunset + ', so the last ' + (L.window - L.daylight) + ' minutes are in twilight' + (L.daylight + L.twilight < L.window ? ' and then dark' : '') + '.');
-    else if (L.twilight > 0) lines.push('Already past sunset (' + L.sunset + '): about ' + L.twilight + ' minutes of fading twilight, then dark.');
-    else lines.push('Dark for the whole practice (sunset ' + L.sunset + ').');
-    if (+w.thunder) lines.push('Thunderstorms are possible. Not safe on the water.');
-    else if (n(w.precip) > 0.02) lines.push('Rain likely (' + w.precip + ' in between 6 and 8 PM).');
-    else if (n(w.cloud) != null) lines.push(n(w.cloud) > 80 ? 'Overcast.' : n(w.cloud) > 40 ? 'Partly cloudy.' : 'Mostly clear skies.');
+    if (L.daylight >= L.window) lines.push('Daylight for all of practice.');
+    else if (L.daylight > 0) lines.push('Sunset at ' + L.sunset + '. Last ' + (L.window - L.daylight) + ' minutes in twilight' + (L.daylight + L.twilight < L.window ? ', then dark' : '') + '.');
+    else if (L.twilight > 0) lines.push('Sunset at ' + L.sunset + ', before practice. ' + L.twilight + ' minutes of twilight, then dark.');
+    else lines.push('Dark for all of practice (sunset ' + L.sunset + ').');
+    if (+w.thunder) lines.push('Thunderstorms possible.');
+    else if (n(w.precip) > 0.02) lines.push('Rain likely: ' + w.precip + ' in during practice.');
+    else if (n(w.cloud) != null) lines.push(n(w.cloud) > 80 ? 'Overcast.' : n(w.cloud) > 40 ? 'Partly cloudy.' : 'Mostly clear.');
     return lines;
   }
 

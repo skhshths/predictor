@@ -6,7 +6,7 @@ A password-locked web app that predicts whether the **RowAmerica Rye (RAR)** tea
 
 You log what actually happened each day. The app collects that day's weather by itself, retrains its AI model on your history, and shows each prediction with an **accuracy** and a **certainty**.
 
-A second view, **Conditions**, lets you rate how it was on the water from 1 to 5, with a short note. Each day it finds the logged day most similar to today. If nothing is close enough, it describes what today might feel like.
+A second view, **Conditions**, lets you rate how it was on the water from 1 to 5, with a short note. Each day it finds the logged day most similar to today. If nothing is close enough, it shows a plain summary of today's forecast.
 
 - **Shared:** every device sees the same data, kept on the server (a Cloudflare Worker with a Durable Object).
 - **Password:** `rar` (lowercase), checked on the server. See [Security](#security).
@@ -139,7 +139,7 @@ Light is **calculated from the sun's position** for the boathouse's coordinates 
 
 ## Accuracy and certainty
 
-- **Certainty** is how sure the model is about one prediction: the model's probability for the outcome it predicts. "On land, 87% certainty" means it gives a 13% chance of rowing on the water. Labels: ≥85% *very confident*, ≥70% *fairly confident*, ≥60% *leaning*, otherwise *toss-up*.
+- **Certainty** is how sure the model is about one prediction: the model's probability for the outcome it predicts. "On land, 87% certainty" means it gives a 13% chance of rowing on the water. Labels: ≥85% *very confident*, ≥70% *fairly confident*, ≥60% *somewhat confident*, otherwise *uncertain*.
 - **After every change** (logging today, adding past days, editing, excluding or deleting a day), the model retrains on its own. A toast and a **Model updated** box at the top of the model panel then show the before → after accuracy, the number of days trained on, and today's prediction with its certainty. The 7-day forecast and each day's held-out guess refresh at the same time.
 - **Accuracy** is how often the model is right on **days it has not seen**. Every day is predicted by a version of the model trained without that day (cross-validation). This is an honest estimate, not a score on the training data.
 - **Live record** counts the predictions the app actually showed before practice that turned out right. A snapshot is taken whenever the app is opened before practice (before 6 PM, or 10 AM on Saturdays) and frozen once practice starts.
@@ -221,9 +221,9 @@ Tapping the same number again clears the rating. Ratings and notes sync to every
 **Today's card shows:**
 - **Expected conditions:** a 1–5 estimate. It's a similarity-weighted average of the 7 most similar *rated* water days, blended with a weather-only estimate when there are few close matches. The card says which it used.
 - **Most similar day:** when a past water day is at least 65% similar, you see its date, how similar it is, its rating and note, and a side-by-side comparison with today (wind, gusts, direction, temperature, light, sky).
-- **What it might feel like:** when nothing is similar enough, the app writes a description from the forecast instead. It covers:
-  - how the water surface should look at that wind speed
-  - how the wind meets Milton Harbor: southerly winds blow up the harbor off Long Island Sound and build waves, northerly winds are offshore and calmer near the boathouse, and others are crosswinds
+- **Forecast summary:** when nothing is similar enough, the app lists today's forecast in plain terms instead:
+  - wind strength (calm, light, moderate, strong, very strong), speed and direction
+  - how the wind meets Milton Harbor: southerly winds blow up the harbor from Long Island Sound (usually rougher near the harbor mouth), northerly winds blow off the land (usually calmer near the boathouse), and others blow across the harbor
   - gusts, temperature, how much light is left, and rain or storms
 
   This is replaced by a real similar day once one exists.
@@ -339,7 +339,7 @@ predictor/
         ├── weather.js    Open-Meteo fetching (forecast + archive) → practice-time features
         ├── model.js      Features, logistic regression, neural network, cross-validation,
         │                 model selection, importance, starter rules (also runs in a Web Worker)
-        ├── conditions.js Ratings, similar-day matching, expected rating, "might feel like" text
+        ├── conditions.js Ratings, similar-day matching, expected rating, forecast summary text
         └── app.js        Lock screen, shared-data sync, weather sync, training, both views
 ```
 

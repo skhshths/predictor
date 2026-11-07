@@ -632,7 +632,7 @@
     if (ts) ts.innerHTML = training ? '<span class="spinner"></span>Training <span id="trainPct">' + pct(trainProgress) + '</span>' : '';
   }
 
-  function certaintyWord(c) { return c >= 0.85 ? 'Very confident' : c >= 0.7 ? 'Fairly confident' : c >= 0.6 ? 'Leaning' : 'Toss-up'; }
+  function certaintyWord(c) { return c >= 0.85 ? 'Very confident' : c >= 0.7 ? 'Fairly confident' : c >= 0.6 ? 'Somewhat confident' : 'Uncertain'; }
 
   function renderHero() {
     var el = $('#hero'); if (!el) return;
@@ -696,7 +696,7 @@
       (compact ? '' : '<span class="q">How were conditions on the water?</span>') +
       '<div class="rate" role="group" aria-label="Conditions rating 1 to 5">' + btns + '</div>' +
       (compact ? '' : '<span class="rate-label">' + (e.rating ? e.rating + ' · ' + C.LABELS[e.rating] : '1 very rough · 5 glassy') + '</span>' +
-        '<input class="text-input sm rate-note" data-rnote="' + d + '" maxlength="140" placeholder="Short note, e.g. chop past the breakwall" value="' + esc(e.ratingNote || '') + '" aria-label="Conditions note">') +
+        '<input class="text-input sm rate-note" data-rnote="' + d + '" maxlength="140" placeholder="Short note (optional)" value="' + esc(e.ratingNote || '') + '" aria-label="Conditions note">') +
     '</div>';
   }
   var RATE_HUE = { 1: 25, 2: 55, 3: 90, 4: 150, 5: 210 };
@@ -842,7 +842,7 @@
     var ratedN = waterDays.filter(function (d) { return store.days[d].rating; }).length;
     var html = '<div class="grid-2">';
 
-    // Today: most similar day, or a generated "what it might feel like".
+    // Today: most similar day, or a plain forecast summary.
     html += '<section class="panel hero" style="--verdict:var(--water)">';
     if (!w) {
       html += '<div class="panel-body"><h3 style="margin:0 0 6px">Waiting for today’s forecast</h3><p class="muted" style="margin:0">' + (syncError ? esc(syncError) : 'Loading practice-time weather for Milton Harbor…') + '</p></div>';
@@ -865,17 +865,17 @@
           (be.ratingNote ? '<blockquote class="quote">“' + esc(be.ratingNote) + '”</blockquote>' : '') +
           compare(w, be.weather) + '</div>';
       } else {
-        html += '<div class="match"><div class="match-head"><b>' + icon('sparkles') + ' What it might feel like</b><span class="muted" style="margin-left:auto;font-size:12.5px">' +
+        html += '<div class="match"><div class="match-head"><b>Forecast summary</b><span class="muted" style="margin-left:auto;font-size:12.5px">' +
           (best ? 'No close match (closest: ' + fmtDate(best.date) + ', ' + Math.round(best.sim * 100) + '% similar)' : 'No water days logged yet to compare') + '</span></div>' +
           '<ul class="feel">' + C.describe(w, t).map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ul>' +
-          '<p class="muted" style="font-size:12px;margin:8px 0 0">Generated from the forecast. A real similar day replaces this once one is logged.</p></div>';
+          '<p class="muted" style="font-size:12px;margin:8px 0 0">Shown until a similar day is logged.</p></div>';
       }
       var others = matches.slice(matched ? 1 : 0, (matched ? 1 : 0) + 3).filter(function (m) { return m.sim >= 0.4; });
       if (others.length) html += '<div class="others"><span class="section-label" style="margin:0">Also similar</span>' + others.map(function (m) {
         return '<span class="chip-day" title="' + esc(m.entry.ratingNote || '') + '">' + fmtDate(m.date) + ' · ' + Math.round(m.sim * 100) + '%' + (m.entry.rating ? ' · ' + m.entry.rating + '/5' : '') + '</span>';
       }).join('') + '</div>';
       if (onWater(e)) html += rateRow(t, e);
-      else if (!e || !e.outcome) html += '<div class="log-row"><span class="q">Went out today?</span><div class="log-btns"><button class="btn btn-water" data-log="water">' + icon('waves') + 'On the water</button><button class="btn btn-split" data-log="split">' + icon('split') + 'Half & half</button><button class="btn btn-land" data-log="land">' + icon('land') + 'On land</button></div></div>';
+      else if (!e || !e.outcome) html += '<div class="log-row"><span class="q">How did practice go today?</span><div class="log-btns"><button class="btn btn-water" data-log="water">' + icon('waves') + 'On the water</button><button class="btn btn-split" data-log="split">' + icon('split') + 'Half & half</button><button class="btn btn-land" data-log="land">' + icon('land') + 'On land</button></div></div>';
     }
     html += '</section>';
 
