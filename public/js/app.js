@@ -813,18 +813,21 @@
       var held = oof[d] != null && labelOf(e) !== null ? guess(oof[d], e) : '<span class="muted">–</span>';
       var live = e.prediction ? guess(e.prediction.p, e) : '<span class="muted">–</span>';
       var wxNote = !e.weather ? '<span class="badge warn">no weather</span>' : w.source === 'manual' ? ' <span class="muted" title="Entered by hand">✎</span>' : w.provisional ? ' <span class="muted" title="Forecast; replaced with observed weather after the day">~</span>' : '';
+      var sum = num(w.tempAvg) + '°F · ' + num(w.windAvg) + ' mph' + (w.dir == null ? '' : ' ' + W.compass(w.dir)) + ', gusts ' + num(w.gustMax) +
+        ' · ' + (w.daylight == null ? '–' : w.daylight + w.twilight) + ' min light · ' + (w.thunder ? 'storms' : w.precip ? num(w.precip, 2) + ' in rain' : num(w.cloud) + '% cloud');
       return '<tr data-date="' + d + '" class="' + (off ? 'off' : '') + '">' +
-        '<td><input type="checkbox" data-include ' + (off ? '' : 'checked') + ' ' + (labelOf(e) === null ? 'disabled title="No-practice and planned land days are never used for training"' : 'title="Use this day for training"') + ' aria-label="Use ' + d + ' for training"></td>' +
-        '<td>' + fmtDate(d) + (e.demo ? '<span class="demo">demo</span>' : '') + '</td><td>' + out + '</td>' +
-        '<td class="num">' + num(w.tempAvg) + '°F' + wxNote + '</td><td class="num">' + num(w.windAvg) + '</td><td class="num">' + num(w.gustMax) + '</td>' +
-        '<td>' + (w.dir == null ? '–' : W.compass(w.dir)) + '</td><td class="num">' + (w.daylight == null ? '–' : w.daylight + ' + ' + w.twilight) + '</td>' +
-        '<td class="num">' + num(w.cloud) + '%</td><td class="num">' + (w.precip ? num(w.precip, 2) : '0') + (w.thunder ? ' ⚡' : '') + '</td>' +
-        '<td>' + held + '</td><td>' + live + '</td>' +
-        '<td title="' + esc(e.ratingNote || '') + '">' + (e.rating ? e.rating + '/5' + (e.ratingNote ? ' ✎' : '') : onWater(e) ? '<span class="muted">–</span>' : '') + '</td>' +
-        '<td style="text-align:right"><button class="icon-btn sm" data-edit aria-label="Edit ' + d + '">' + icon('edit') + '</button><button class="icon-btn sm danger" data-del aria-label="Delete ' + d + '">' + icon('trash') + '</button></td></tr>';
+        '<td class="c-use"><input type="checkbox" data-include ' + (off ? '' : 'checked') + ' ' + (labelOf(e) === null ? 'disabled title="No-practice and planned land days are never used for training"' : 'title="Use this day for training"') + ' aria-label="Use ' + d + ' for training"></td>' +
+        '<td class="c-date">' + fmtDate(d) + (e.demo ? '<span class="demo">demo</span>' : '') + '</td><td class="c-out">' + out + '</td>' +
+        '<td class="m-only c-sum">' + (e.weather ? sum : '') + wxNote + '</td>' +
+        '<td class="num d-only">' + num(w.tempAvg) + '°F' + wxNote + '</td><td class="num d-only">' + num(w.windAvg) + '</td><td class="num d-only">' + num(w.gustMax) + '</td>' +
+        '<td class="d-only">' + (w.dir == null ? '–' : W.compass(w.dir)) + '</td><td class="num d-only">' + (w.daylight == null ? '–' : w.daylight + ' + ' + w.twilight) + '</td>' +
+        '<td class="num d-only">' + num(w.cloud) + '%</td><td class="num d-only">' + (w.precip ? num(w.precip, 2) : '0') + (w.thunder ? ' ⚡' : '') + '</td>' +
+        '<td class="c-held" data-l="Held-out guess">' + held + '</td><td class="c-live" data-l="Live guess">' + live + '</td>' +
+        '<td class="c-cond" data-l="Conditions" title="' + esc(e.ratingNote || '') + '">' + (e.rating ? e.rating + '/5' + (e.ratingNote ? ' ✎' : '') : onWater(e) ? '<span class="muted">–</span>' : '') + '</td>' +
+        '<td class="c-act"><button class="icon-btn sm" data-edit aria-label="Edit ' + d + '">' + icon('edit') + '</button><button class="icon-btn sm danger" data-del aria-label="Delete ' + d + '">' + icon('trash') + '</button></td></tr>';
     }).join('');
-    el.innerHTML = head + '<div class="table-wrap"><table class="data"><thead><tr><th title="Use for training">Use</th><th>Date</th><th>Practice</th><th>Temp</th><th>Wind mph</th><th>Gusts</th><th>From</th><th title="Minutes of daylight + twilight during practice">Light min</th><th>Clouds</th><th>Rain in</th><th title="Prediction from a model that did not see this day (cross-validation)">Held-out guess</th><th title="The prediction shown on the day, before practice">Live guess</th><th title="Conditions on the water, 1–5">Cond.</th><th></th></tr></thead><tbody>' +
-      (rows || '<tr><td colspan="14" class="muted" style="text-align:center;padding:20px">No days match this filter.</td></tr>') + '</tbody></table></div>' +
+    el.innerHTML = head + '<div class="table-wrap"><table class="data cards train"><thead><tr><th title="Use for training">Use</th><th>Date</th><th>Practice</th><th class="m-only"></th><th>Temp</th><th>Wind mph</th><th>Gusts</th><th>From</th><th title="Minutes of daylight + twilight during practice">Light min</th><th>Clouds</th><th>Rain in</th><th title="Prediction from a model that did not see this day (cross-validation)">Held-out guess</th><th title="The prediction shown on the day, before practice">Live guess</th><th title="Conditions on the water, 1–5">Cond.</th><th></th></tr></thead><tbody>' +
+      (rows || '<tr class="empty-row"><td colspan="15" class="muted" style="text-align:center;padding:20px">No days match this filter.</td></tr>') + '</tbody></table></div>' +
       '<div class="panel-foot">Uncheck <b style="color:var(--text-2)">Use</b> to leave a day out of training without deleting it. Half & half days count as water; planned land days are never used. Weather is for practice hours (6–8 PM; Saturdays 10 AM–12 PM). Light is minutes of daylight + twilight during practice.</div>';
     bindFilter();
   }
@@ -896,14 +899,17 @@
     html += '<section class="panel" style="margin-top:12px"><div class="panel-head"><span class="panel-title">' + icon('star') + 'Water days <span class="muted">· rate each one 1–5 with a short note</span></span>' +
       '<div class="panel-actions"><button class="btn btn-soft btn-sm" data-act="add">' + icon('plus') + 'Add days</button></div></div>';
     if (!waterDays.length) html += '<div class="empty"><h3>No water days yet</h3><p>Log a practice as “On the water”, then rate how it was. Similar-day matching gets better with every rated day.</p></div>';
-    else html += '<div class="table-wrap"><table class="data cond"><thead><tr><th>Date</th><th>Rating</th><th>Note</th><th>Wind</th><th>Gusts</th><th>From</th><th>Temp</th><th>Light</th>' + (w ? '<th title="How similar this day was to today">Like today</th>' : '') + '</tr></thead><tbody>' +
+    else html += '<div class="table-wrap"><table class="data cards cond"><thead><tr><th>Date</th><th class="m-only"></th><th>Rating</th><th>Note</th><th>Wind</th><th>Gusts</th><th>From</th><th>Temp</th><th>Light</th>' + (w ? '<th title="How similar this day was to today">Like today</th>' : '') + '</tr></thead><tbody>' +
       waterDays.map(function (d) {
         var en = store.days[d], ww = en.weather || {};
-        return '<tr data-date="' + d + '"><td>' + fmtDate(d) + (en.outcome === 'split' ? ' <span class="badge split" title="Half & half">½</span>' : '') + '</td><td>' + rateRow(d, en, true) + '</td>' +
-          '<td><input class="text-input sm" data-rnote="' + d + '" maxlength="140" value="' + esc(en.ratingNote || '') + '" placeholder="Add a note" style="min-width:200px" aria-label="Note for ' + d + '"></td>' +
-          '<td class="num">' + num(ww.windAvg) + '</td><td class="num">' + num(ww.gustMax) + '</td><td>' + (ww.dir == null ? '–' : W.compass(ww.dir)) + '</td><td class="num">' + num(ww.tempAvg) + '°</td>' +
-          '<td class="num">' + (ww.daylight == null ? '–' : ww.daylight + ' + ' + ww.twilight) + '</td>' +
-          (w ? '<td class="num">' + (en.weather && en.weather.windAvg != null ? Math.round(C.similarity(w, en.weather) * 100) + '%' : '–') + '</td>' : '') + '</tr>';
+        var like = w && en.weather && en.weather.windAvg != null ? Math.round(C.similarity(w, en.weather) * 100) + '%' : '–';
+        var csum = en.weather ? num(ww.windAvg) + ' mph' + (ww.dir == null ? '' : ' ' + W.compass(ww.dir)) + ', gusts ' + num(ww.gustMax) + ' · ' + num(ww.tempAvg) + '°F' + (w ? ' · ' + like + ' like today' : '') : 'No weather yet';
+        return '<tr data-date="' + d + '"><td class="c-date">' + fmtDate(d) + (en.outcome === 'split' ? ' <span class="badge split" title="Half & half">½</span>' : '') + '</td>' +
+          '<td class="m-only c-sum">' + csum + '</td><td class="c-rate">' + rateRow(d, en, true) + '</td>' +
+          '<td class="c-note"><input class="text-input sm note-input" data-rnote="' + d + '" maxlength="140" value="' + esc(en.ratingNote || '') + '" placeholder="Add a note" aria-label="Note for ' + d + '"></td>' +
+          '<td class="num d-only">' + num(ww.windAvg) + '</td><td class="num d-only">' + num(ww.gustMax) + '</td><td class="d-only">' + (ww.dir == null ? '–' : W.compass(ww.dir)) + '</td><td class="num d-only">' + num(ww.tempAvg) + '°</td>' +
+          '<td class="num d-only">' + (ww.daylight == null ? '–' : ww.daylight + ' + ' + ww.twilight) + '</td>' +
+          (w ? '<td class="num d-only">' + like + '</td>' : '') + '</tr>';
       }).join('') + '</tbody></table></div>';
     html += '</section>';
     el.innerHTML = html;
@@ -1036,12 +1042,12 @@
     var t = S.todayKey();
     var body = h('<div>' +
       '<p class="confirm-text">Pick a date range, then mark each day. <b>Land</b> means the weather kept you off the water; <b>Planned land</b> means a land day for its own sake (not used for training); <b>Half</b> is half & half. Weather and light are filled in automatically.</p>' +
-      '<div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+      '<div class="form-row date-range">' +
         '<div><label class="form-label" for="from">From</label><input class="text-input" type="date" id="from" max="' + t + '" value="' + S.addDays(t, -7) + '"></div>' +
         '<div><label class="form-label" for="to">To</label><input class="text-input" type="date" id="to" max="' + t + '" value="' + S.addDays(t, -1) + '"></div></div>' +
-      '<div class="form-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="form-label" style="margin:0">Set all to</span>' +
-        '<button type="button" class="btn btn-ghost btn-sm" data-all="water">Water</button><button type="button" class="btn btn-ghost btn-sm" data-all="split">Half</button><button type="button" class="btn btn-ghost btn-sm" data-all="land">Land</button><button type="button" class="btn btn-ghost btn-sm" data-all="planned">Planned land</button><button type="button" class="btn btn-ghost btn-sm" data-all="none">No practice</button><button type="button" class="btn btn-ghost btn-sm" data-all="skip">Skip</button>' +
-        '<label class="check-label" style="margin-left:auto"><input type="checkbox" id="wkends">Skip weekends</label></div>' +
+      '<div class="form-row set-all"><span class="form-label">Set all to</span>' +
+        '<button type="button" class="btn btn-soft btn-sm" data-all="water">Water</button><button type="button" class="btn btn-soft btn-sm" data-all="split">Half</button><button type="button" class="btn btn-soft btn-sm" data-all="land">Land</button><button type="button" class="btn btn-soft btn-sm" data-all="planned">Planned land</button><button type="button" class="btn btn-soft btn-sm" data-all="none">No practice</button><button type="button" class="btn btn-soft btn-sm" data-all="skip">Skip</button>' +
+        '<label class="check-label"><input type="checkbox" id="wkends">Skip weekends</label></div>' +
       '<div class="bulk" id="bulk"></div></div>');
     var from = $('#from', body), to = $('#to', body), list = $('#bulk', body), wk = $('#wkends', body);
     var choice = {};

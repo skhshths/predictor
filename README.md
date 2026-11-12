@@ -79,6 +79,19 @@ Then open http://localhost:8787. It uses a local copy of the Durable Object, sep
 
 Forgot a day? Use **Add past days**, or edit any row in the data table.
 
+### On a phone
+
+The layout adapts below 600 px wide (most phones in portrait):
+
+- **Tables become cards.** Each training day shows its date, outcome, edit and delete buttons, then a one-line weather summary and the held-out and live guesses. Each water day on the Conditions view shows its weather, five full-width rating buttons and a full-width note box.
+- **Next 7 days** is a single row you swipe sideways.
+- **The training-data filter** is one row that scrolls sideways.
+- **Dialogs** open as bottom sheets. The Save and Cancel buttons stay pinned at the bottom while the list scrolls. In **Add past days**, each day's buttons sit on their own row under the date.
+- **Text boxes use 16 px text**, so iOS Safari doesn't zoom in when you tap them. Buttons are at least 34 px tall.
+- **Notches and home bars** are respected (safe-area insets).
+
+Below 370 px wide (iPhone SE and smaller), the From/To dates stack and each day's buttons in **Add past days** split into two rows of three.
+
 ---
 
 ## Land days, half & half, and plans
