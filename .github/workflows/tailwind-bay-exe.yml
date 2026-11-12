@@ -1,0 +1,28 @@
+# Builds the portable Windows executable for the Tailwind Bay flying game.
+# Runs only when started by hand from the Actions tab.
+name: Build Tailwind Bay .exe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: flight-game
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npm run dist:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TailwindBay-windows
+          path: flight-game/dist/TailwindBay.exe
+          if-no-files-found: error

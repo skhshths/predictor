@@ -1,0 +1,27 @@
+{
+  "name": "tailwind-bay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tailwind Bay: a 3D flying game with a town, a hangar of aeroplanes and a build-your-own plane.",
+  "author": "Tailwind Bay",
+  "main": "desktop/main.js",
+  "scripts": {
+    "start": "http-server . -p 8080 -c-1 -o",
+    "desktop": "electron .",
+    "dist:win": "electron-builder --win portable --x64",
+    "dist:win-folder": "electron-builder --win dir --x64"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8",
+    "http-server": "14.1.1"
+  },
+  "build": {
+    "appId": "bay.tailwind.game",
+    "productName": "Tailwind Bay",
+    "directories": { "output": "dist" },
+    "files": ["index.html", "js/**", "vendor/**", "desktop/main.js", "package.json"],
+    "win": { "target": [{ "target": "portable", "arch": ["x64"] }], "signAndEditExecutable": false },
+    "portable": { "artifactName": "TailwindBay.exe" }
+  }
+}

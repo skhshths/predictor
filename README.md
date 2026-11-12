@@ -373,3 +373,9 @@ predictor/
 | Data disappeared | In local mode, you're probably in a different browser or a private window. In shared mode, check whether someone erased or replaced it. Import your latest backup. |
 | Accuracy isn't better than the baseline | Log more days, especially varied ones (windy days on the water, calm days on land). Exclude days where the decision wasn't about the weather, such as erg tests or regatta travel. |
 | Cloudflare build fails with a name mismatch | Make `"name"` in `wrangler.jsonc` match your Worker's name. |
+
+---
+
+## Also in this repository
+
+[`flight-game/`](flight-game/README.md) holds **Tailwind Bay**, a separate 3D flying game. It is self-contained, is not served by the Worker, and is not part of the Cloudflare deployment. See its own README for how to run it.
