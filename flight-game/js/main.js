@@ -146,13 +146,13 @@ Object.assign(G, {
   cycle(id, n) { const v = save.cyc[id] ?? 0; save.cyc[id] = v + 1; G.persist(); return v % n; },
   openShop(slot, npcId) { G.showroom = G.custom; ui.shop(slot, npcById[npcId]); },
   openHangar() { if (G.lib.ac.pos.distanceTo(tmpV.set(SPOT.lib.x, HOME_H, SPOT.lib.z)) > 150) park(G.lib); G.showroom = G.lib; ui.hangar(); },
-  recallCustom() { park(G.custom); ui.toast(`${save.planeName} is back on the apron.`, 'good'); },
+  recallCustom() { park(G.custom); ui.toast(`${save.planeName} on the apron`, 'good'); },
   setLibPlane(id) { save.lib = id; refit(G.lib, LIBRARY.find(p => p.id === id)); park(G.lib); G.showroom = G.lib; G.persist(); },
   buyPart(id) {
     const p = PART[id];
     if (save.coins < p.price) return false;
     save.coins -= p.price; save.owned.push(id); audio.chime([660, 990, 1320]);
-    G.fitPart(id); ui.toast(`${p.name} fitted to ${save.planeName}.`, 'good');
+    G.fitPart(id); ui.toast(`Fitted · ${p.name}`, 'good');
     return true;
   },
   fitPart(id) {
@@ -161,7 +161,7 @@ Object.assign(G, {
     refit(G.custom, customSpec(save.loadout, save.planeName));
     ui.coins(save.coins); G.persist();
   },
-  earn(n, msg) { save.coins += n; ui.coins(save.coins); ui.toast(`${msg}  +${n} coins`, 'good'); audio.chime(); G.persist(); },
+  earn(n, msg) { save.coins += n; ui.coins(save.coins); ui.toast(`${msg} · +${n}`, 'good'); audio.chime(); G.persist(); },
 
   // Parcel jobs, offered by the postmaster and by every strip keeper.
   jobNode(strip, npcId) {
@@ -186,7 +186,7 @@ Object.assign(G, {
     input.throttle = 0; input.lastThrAxis = null; input.active = input.active === 'stick' ? 'stick' : 'keys';
     camQ.copy(e.ac.quat); look.yaw = look.pitch = 0; airTime = 0; smokeOn = false;
     audio.start(); G.onUIChange();
-    ui.toast(`${e.spec.name}. Throttle up with R or your lever. Backspace jumps to the runway.`);
+    ui.toast(`${e.spec.name} · R throttle · Backspace runway`);
   },
   leave() {
     const ac = G.active.ac, v = G.active.spec.vis;
@@ -255,7 +255,7 @@ function updateWalk(dt) {
     const d = Math.hypot(e.ac.pos.x - player.x, e.ac.pos.z - player.z);
     if (d < Math.max(5.5, e.spec.vis.len * 0.5)) target = { plane: e };
   }
-  if (target) ui.prompt(target.npc ? `<kbd>E</kbd> Talk to ${target.npc.name}` : `<kbd>E</kbd> Board ${target.plane.spec.custom ? save.planeName : 'the ' + target.plane.spec.name}`);
+  if (target) ui.prompt(target.npc ? `<kbd>E</kbd> ${target.npc.name}` : `<kbd>E</kbd> Board ${target.plane.spec.custom ? save.planeName : target.plane.spec.name}`);
   else ui.prompt('');
   if (input.consume('keyE') || input.consume('enter') || input.consume('interact')) {
     if (target?.npc) {
@@ -264,8 +264,8 @@ function updateWalk(dt) {
       if (!save.met[n.id]) { save.met[n.id] = 1; G.persist(); }
     } else if (target?.plane) G.board(target.plane);
   }
-  ui.objective(save.job ? `Parcel for <b>${STRIPS.find(s => s.id === save.job.to).name}</b>. Board a plane and follow the gold marker.` :
-    !save.met.ines ? 'Walk to the hangar and talk to <b>Captain Ines</b>, or board your plane on the apron.' : '');
+  ui.objective(save.job ? `Parcel · <b>${STRIPS.find(s => s.id === save.job.to).name}</b>` :
+    !save.met.ines ? 'Hangar: <b>Captain Ines</b> · your plane: apron' : '');
   audio.update(false, 0, 0, false);
 }
 
@@ -305,7 +305,7 @@ function updateFly(dt) {
   if (ac.crashed) {
     crashT -= dt;
     if (crashT < 0.7) $('fade').classList.add('on');
-    if (crashT <= 0) { G.toRunway(); $('fade').classList.remove('on'); ui.toast('Towed back to the runway. No charge this time.'); }
+    if (crashT <= 0) { G.toRunway(); $('fade').classList.remove('on'); ui.toast('Reset to runway'); }
     return flyCamera(dt, e);
   }
   // --- gather controls
@@ -341,15 +341,15 @@ function updateFly(dt) {
   }
   if (input.consume('flaps')) { ac.flapsSet = (ac.flapsSet + 1) % 3; ui.toast(['Flaps up.', 'Flaps half.', 'Flaps full.'][ac.flapsSet]); }
   if (input.consume('camera')) { camMode = (camMode + 1) % 3; ui.toast(CAM_NAMES[camMode]); }
-  if (input.consume('mouseMode')) { settings.mouseMode = { aim: 'yoke', yoke: 'off', off: 'aim' }[mode]; G.persist(); ui.toast({ aim: 'Mouse aim: point where you want to fly.', yoke: 'Mouse yoke: the mouse is the stick.', off: 'Mouse flying off.' }[settings.mouseMode]); }
-  if (input.consume('smoke')) { if (s.smoke) { smokeOn = !smokeOn; ui.toast(smokeOn ? 'Smoke on.' : 'Smoke off.'); } else ui.toast('No smoke system fitted. Juniper sells one at Odds & Props.'); }
-  if (input.consume('reset')) { G.toRunway(); ui.toast('Lined up on runway 36.'); }
+  if (input.consume('mouseMode')) { settings.mouseMode = { aim: 'yoke', yoke: 'off', off: 'aim' }[mode]; G.persist(); ui.toast({ aim: 'Mouse: aim', yoke: 'Mouse: yoke', off: 'Mouse: off' }[settings.mouseMode]); }
+  if (input.consume('smoke')) { if (s.smoke) { smokeOn = !smokeOn; ui.toast(smokeOn ? 'Smoke on.' : 'Smoke off.'); } else ui.toast('No smoke system · Odds & Props sells one'); }
+  if (input.consume('reset')) { G.toRunway(); ui.toast('Runway 36'); }
   const trim = (K.has('Period') || input.down('trimUp') ? 1 : 0) - (K.has('Comma') || input.down('trimDown') ? 1 : 0);
   ac.trim = clamp(ac.trim + trim * 0.04 * dt, -0.14, 0.14);
   const speed = ac.vel.length();
   if (input.consume('enter') || input.consume('interact')) {
     if (ac.onGround && speed < 2) return G.leave();
-    ui.toast(ac.onGround ? 'Stop the aeroplane first (B or Space to brake).' : 'Land and stop before you get out.');
+    ui.toast(ac.onGround ? 'Stop first · B to brake' : 'Land and stop first');
   }
 
   // --- simulate
@@ -362,7 +362,7 @@ function updateFly(dt) {
   // --- events
   if (!ac.onGround) airTime += dt;
   if (ac.touchdown) {
-    if (airTime > 6) ui.toast(ac.onWater ? 'Splashdown.' : ac.touchdown < 1 ? 'Greaser! Barely felt it.' : ac.touchdown < 2.6 ? 'Nice landing.' : 'Firm arrival. The gear held.', 'good');
+    if (airTime > 6) ui.toast(ac.onWater ? 'Water landing' : ac.touchdown < 1 ? 'Touchdown · smooth' : ac.touchdown < 2.6 ? 'Touchdown · good' : 'Touchdown · hard', 'good');
     ac.touchdown = 0; airTime = 0;
   }
   if (ac.onGround && speed < 1.5) {
@@ -372,8 +372,8 @@ function updateFly(dt) {
         const dx = ac.pos.x - st.x, dz = ac.pos.z - st.z, c = Math.cos(st.rot), sn = Math.sin(st.rot);
         const lx = dx * c - dz * sn, lz = dx * sn + dz * c;
         if (Math.abs(lx) > 220 || Math.abs(lz) > st.len / 2 + 160) continue;
-        if (!save.visited.includes(st.id)) { save.visited.push(st.id); G.earn(300, `Discovered ${st.name}.`); }
-        if (save.job && save.job.to === st.id) { const pay = save.job.pay; save.job = null; G.earn(pay, `Parcel delivered to ${st.name}.`); }
+        if (!save.visited.includes(st.id)) { save.visited.push(st.id); G.earn(300, `New airfield · ${st.name}`); }
+        if (save.job && save.job.to === st.id) { const pay = save.job.pay; save.job = null; G.earn(pay, `Delivered · ${st.name}`); }
         if (st.id === 'home' && G.rings.some(r => r.got)) resetRings();
       }
     }
@@ -382,7 +382,7 @@ function updateFly(dt) {
     if (!r.got && r.pos.distanceTo(ac.pos) < 38) {
       r.got = true; r.mesh.visible = false;
       const left = G.rings.filter(x => !x.got).length;
-      if (left) G.earn(40, `Ring! ${left} to go.`); else { G.earn(440, 'All twelve rings in one flight!'); resetRings(); }
+      if (left) G.earn(40, `Ring · ${left} left`); else { G.earn(440, 'All 12 rings'); resetRings(); }
     }
   }
   if (smokeOn) {
@@ -397,8 +397,8 @@ function updateFly(dt) {
 
   flyCamera(dt, e);
   const t = save.job && STRIPS.find(x => x.id === save.job.to);
-  ui.objective(t ? `Parcel for <b>${t.name}</b> · ${(Math.hypot(t.x - ac.pos.x, t.z - ac.pos.z) / 1000).toFixed(1)} km · land and stop to deliver` : '');
-  ui.prompt(ac.onGround && speed < 2 && ac.thr < 0.1 ? '<kbd>Enter</kbd> Leave the plane' : '');
+  ui.objective(t ? `Parcel · <b>${t.name}</b> · ${(Math.hypot(t.x - ac.pos.x, t.z - ac.pos.z) / 1000).toFixed(1)} km` : '');
+  ui.prompt(ac.onGround && speed < 2 && ac.thr < 0.1 ? '<kbd>Enter</kbd> Exit' : '');
   audio.update(true, ac.thr, speed, s.jet);
 }
 
@@ -445,7 +445,7 @@ function orbitCamera(target, radius, angle, heightK = 0.3) {
 function openPause() { ui.pause(); }
 input.onUnlock = () => { if (!ui.open && G.mode !== 'title') openPause(); };
 
-$('btn-start').onclick = () => { $('title').hidden = true; audio.start(); G.mode = 'walk'; G.onUIChange(); input.requestLock(); ui.toast('Welcome to Tailwind Bay. Click the view to look around with the mouse.'); };
+$('btn-start').onclick = () => { $('title').hidden = true; audio.start(); G.mode = 'walk'; G.onUIChange(); input.requestLock(); ui.toast('Click the view to capture the mouse'); };
 $('btn-controls').onclick = () => { audio.start(); ui.controls(); };
 $('btn-help').onclick = () => ui.help();
 

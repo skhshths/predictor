@@ -79,7 +79,7 @@ export class UI {
   dialog(npc, node) {
     const opts = (node.options || []).map((o, i) => `<button data-a="o" data-v="${i}">${esc(o.label)}</button>`).join('');
     this.show('dialog', 'dialog', `<div class="who"><b>${esc(npc.name)}</b><span>${esc(npc.role)}</span></div><p>${esc(node.text)}</p>
-      <div class="opts">${opts}<button data-a="bye" class="${opts ? 'ghost' : 'primary'}">${opts ? 'Goodbye' : 'Thanks'}</button></div>`,
+      <div class="opts">${opts}<button data-a="bye" class="${opts ? 'ghost' : 'primary'}">${opts ? 'Leave' : 'OK'}</button></div>`,
       { o: (i) => { const o = node.options[+i]; this.hide(); o.fn(); }, bye: () => this.hide() });
   }
 
@@ -108,14 +108,14 @@ export class UI {
       const lo = slot === 'extra' ? { ...S.loadout, extras: fitted ? S.loadout.extras : [...S.loadout.extras, p.id] } : { ...S.loadout, [slot]: p.id };
       const chips = fitted ? '' : this.deltaChips(cur, customSpec(lo));
       const extra = p.col ? `<span class="swatch">${p.col.map(c => `<i style="background:${hex(c)}"></i>`).join('')}</span>` : p.retract ? '<span class="chip">Retracts</span>' : p.floats ? '<span class="chip">Lands on water</span>' : p.id === 'x_smoke' ? '<span class="chip">Smoke trail</span>' : '';
-      const btn = fitted ? `<button disabled>Fitted to ${esc(S.planeName)}</button>` :
-        owned ? `<button data-a="fit" data-v="${p.id}" class="primary">Fit it</button>` :
-          `<button data-a="buy" data-v="${p.id}" class="primary" ${S.coins < p.price ? 'disabled' : ''}>${S.coins < p.price ? `Need ${p.price - S.coins} more coins` : 'Buy and fit'}</button>`;
-      return `<div class="card ${fitted ? 'on' : ''}"><div class="head"><b>${esc(p.name)}</b><span class="price">${owned ? 'Owned' : p.price + ' coins'}</span></div>
+      const btn = fitted ? `<button disabled>Fitted</button>` :
+        owned ? `<button data-a="fit" data-v="${p.id}" class="primary">Fit</button>` :
+          `<button data-a="buy" data-v="${p.id}" class="primary" ${S.coins < p.price ? 'disabled' : ''}>${S.coins < p.price ? `Short ${p.price - S.coins}` : 'Buy'}</button>`;
+      return `<div class="card ${fitted ? 'on' : ''}"><div class="head"><b>${esc(p.name)}</b><span class="price">${owned ? 'Owned' : p.price}</span></div>
         <p>${esc(p.blurb)}</p><div class="chips">${chips}${extra}</div>${btn}</div>`;
     }).join('');
-    this.show('panel', 'shop', `<header><h2>${titles[slot]}</h2><span class="price num">${S.coins.toLocaleString('en-US')} coins</span></header>
-      <div class="body"><p style="margin:0;color:var(--muted)">${SLOT_NAMES[slot]} for <b style="color:var(--cream)">${esc(S.planeName)}</b>. Parts go straight onto the aeroplane.</p>${this.statBlock(cur)}${cards}</div>
+    this.show('panel', 'shop', `<header><h2>${titles[slot]}</h2><span class="price num">${S.coins.toLocaleString('en-US')}</span></header>
+      <div class="body"><p class="note">${SLOT_NAMES[slot]} · fitted on purchase · ${esc(S.planeName)}</p>${this.statBlock(cur)}${cards}</div>
       <footer><button data-a="close">Done</button></footer>`,
       { buy: (id) => { if (G.buyPart(id)) this.shop(slot, npc); }, fit: (id) => { G.fitPart(id); this.shop(slot, npc); }, close: () => this.hide() });
   }
@@ -127,14 +127,14 @@ export class UI {
     const list = LIBRARY.filter(p => p.cat === this.hangarCat).map(p => `<button data-a="pick" data-v="${p.id}" class="${p.id === sel.id ? 'on' : ''}"><span>${esc(p.name)}</span><small>${Math.round(p.vmax * KT)} kt</small></button>`).join('');
     const bar = (label, val, max, unit) => `<div class="barrow"><span>${label}</span><div class="bar"><i style="width:${Math.min(100, (val / max) * 100)}%"></i></div><span>${Math.round(val)} ${unit}</span></div>`;
     const tags = [sel.jet ? 'Jet' : 'Propeller', sel.retract ? 'Retractable gear' : sel.floats ? 'Floats: lands on water' : 'Fixed gear', sel.tailwheel ? 'Taildragger' : null].filter(Boolean).map(t => `<span class="chip">${t}</span>`).join('');
-    this.show('panel', 'hangar', `<header><h2>The Hangar</h2><span class="price">${LIBRARY.length} aeroplanes</span></header>
+    this.show('panel', 'hangar', `<header><h2>Hangar</h2><span class="price">${LIBRARY.length} aeroplanes</span></header>
       <div class="body"><div class="tabs">${tabs}</div><div class="list">${list}</div>
         <div class="card on"><div class="head"><b>${esc(sel.name)}</b><span class="price">${esc(sel.cat)}</span></div><p>${esc(sel.blurb)}</p><div class="chips">${tags}</div>
           ${bar('Top speed', sel.vmax * KT, 860, 'kt')}${bar('Stall speed', sel.vstall * KT, 140, 'kt')}${bar('Climb', sel.climb * 196.85, 30000, 'fpm')}${bar('Roll rate', sel.rollRate * 57.3, 345, '°/s')}${bar('Weight', sel.mass / 1000, 240, 't')}
         </div>
-        <div class="field"><label for="pname">Name of your own plane<small>It is parked next to the hangar.</small></label><input type="text" id="pname" data-i="name" maxlength="22" value="${esc(S.planeName)}" style="width:170px"></div>
+        <div class="field"><label for="pname">Your plane's name</label><input type="text" id="pname" data-i="name" maxlength="22" value="${esc(S.planeName)}" style="width:170px"></div>
       </div>
-      <footer><button data-a="fly" class="primary">Fly the ${esc(sel.name)}</button><button data-a="close">Leave it on the apron</button></footer>`,
+      <footer><button data-a="fly" class="primary">Fly</button><button data-a="close">Close</button></footer>`,
       { cat: (c) => { this.hangarCat = c; this.hangar(); }, pick: (id) => { G.setLibPlane(id); this.hangar(); }, fly: () => { this.hide(); G.board(G.lib); },
         name: (v) => { S.planeName = v.trim() || 'The Tinker'; G.custom.spec.name = S.planeName; G.persist(); }, close: () => this.hide() });
   }
@@ -142,36 +142,36 @@ export class UI {
   // ------------------------------------------------------------ pause
   pause() {
     const G = this.G;
-    this.show('modal', 'pause', `<header><h2>Paused</h2><span class="price num">${G.save.coins.toLocaleString('en-US')} coins</span></header>
+    this.show('modal', 'pause', `<header><h2>Paused</h2><span class="price num">${G.save.coins.toLocaleString('en-US')}</span></header>
       <div class="body"><div class="menu">
         <button data-a="resume" class="primary">Resume</button>
-        <button data-a="controls">Controls, joystick and settings</button>
-        <button data-a="help">How to play</button>
-        <button data-a="home">Return to Tailwind Bay</button>
-        <button data-a="wipe">Start a new game…</button>
+        <button data-a="controls">Controls &amp; settings</button>
+        <button data-a="help">Help</button>
+        <button data-a="home">Return to base</button>
+        <button data-a="wipe">New game</button>
       </div></div>`,
       { resume: () => this.hide(), controls: () => this.controls(() => this.pause()), help: () => this.help(() => this.pause()), home: () => { this.hide(); G.goHome(); },
-        wipe: () => this.confirm('Start a new game?', 'This erases your coins, parts and discoveries. Controller bindings and settings are kept.', () => G.wipe(), () => this.pause()) });
+        wipe: () => this.confirm('New game', 'Erases coins, parts and discoveries. Keeps settings and bindings.', () => G.wipe(), () => this.pause()) });
   }
   confirm(title, text, yes, no) {
-    this.show('modal', 'confirm', `<header><h2>${title}</h2></header><div class="body"><p style="margin:0">${text}</p></div><footer><button data-a="no" class="primary" autofocus>Keep playing</button><button data-a="yes">Erase and restart</button></footer>`,
+    this.show('modal', 'confirm', `<header><h2>${title}</h2></header><div class="body"><p class="note">${text}</p></div><footer><button data-a="no" class="primary" autofocus>Cancel</button><button data-a="yes">Erase</button></footer>`,
       { yes, no }, no);
   }
 
   // ------------------------------------------------------------ help
   help(back) {
     const k = (keys, what) => `<span>${keys.split(' ').map(x => x === '/' ? '/' : `<kbd>${x}</kbd>`).join(' ')}</span><span>${what}</span>`;
-    this.show('modal', 'help', `<header><h2>How to play</h2></header><div class="body">
-      <p style="margin:0">Walk around Tailwind Bay, talk to people, and walk up to an aeroplane to board it. Captain Ines by the hangar lends you any of ${LIBRARY.length} aeroplanes. The shops on the main street sell parts for your own plane, and every part is fitted the moment you buy it. Earn coins by delivering parcels for the post office, flying through golden rings and finding new airstrips.</p>
+    this.show('modal', 'help', `<header><h2>Help</h2></header><div class="body">
+      <p class="note">Board a plane from the apron. Hangar: Captain Ines. Parts: shops on the main street, fitted on purchase. Coins: parcels, rings, new airfields.</p>
       <div class="cols"><div><h3>Flying</h3><div class="keys">
         ${k('W S', 'Nose down / nose up')}${k('A D', 'Roll left / right')}${k('Q E', 'Rudder, and steering on the ground')}${k('R F', 'Throttle up / down (also <kbd>Shift</kbd>, mouse wheel)')}${k('1 … 9 0', 'Set throttle 10% … 100%')}
         ${k('G', 'Landing gear')}${k('V', 'Flaps: up, half, full')}${k('B / Space', 'Wheel brakes')}${k(', .', 'Pitch trim')}${k('C', 'Camera: chase, cockpit, wide')}${k('M', 'Mouse flying: aim, yoke, off')}
         ${k('X', 'Smoke (if fitted)')}${k('Enter', 'Leave the plane when stopped')}${k('Backspace', 'Back to the home runway')}${k('Esc', 'Pause')}</div></div>
       <div><h3>On foot</h3><div class="keys">${k('W A S D', 'Walk')}${k('Shift', 'Run')}${k('Space', 'Hop')}${k('E', 'Talk, board a plane')}</div>
-        <h3>Mouse</h3><div class="keys"><span>Aim</span><span>Point the circle where you want to go and the plane flies there.</span><span>Yoke</span><span>The mouse is the stick. Middle-click centres it.</span><span>Right button</span><span>Hold to look around.</span></div>
-        <h3>Joystick / HOTAS</h3><p style="margin:0;font-size:13.5px">Plug in a stick, throttle and pedals and they are picked up straight away. Throttle levers are absolute. Rebind any axis or button in Controls.</p>
-        <h3>First flight</h3><p style="margin:0;font-size:13.5px">Full throttle, keep straight with rudder, ease back at about 1.2 × stall speed. To land: throttle back, flaps down, cross the fence a third above stall and hold the nose up until the wheels touch.</p></div></div>
-      </div><footer><button data-a="close" class="primary">Got it</button></footer>`, { close: () => (back ? back() : this.hide()) }, back);
+        <h3>Mouse</h3><div class="keys"><span>Aim</span><span>Plane follows the circle</span><span>Yoke</span><span>Mouse is the stick. Middle-click centres</span><span>Right button</span><span>Look around</span></div>
+        <h3>Joystick / HOTAS</h3><p class="note">Plug in and press a button. Throttle levers are absolute. Rebind in Controls.</p>
+        <h3>Take-off / landing</h3><p class="note">Rotate at 1.2 × VS. Land at 1.3 × VS, flaps full, hold the nose up.</p></div></div>
+      </div><footer><button data-a="close" class="primary">Close</button></footer>`, { close: () => (back ? back() : this.hide()) }, back);
   }
 
   // ------------------------------------------------------------ controls & settings
@@ -180,26 +180,26 @@ export class UI {
     const row = (kind, [id, label]) => {
       const d = inp.describe(kind, id);
       const listening = inp.listen && inp.listen.action === id;
-      return `<tr><td>${label}</td><td class="bindtxt ${listening ? '' : d ? (d.connected ? '' : 'off') : 'none'}">${listening ? (kind === 'axis' ? 'Move the axis…' : 'Press the button…') : d ? esc(d.text) + (d.connected ? '' : ' (unplugged)') : 'not bound'}</td>
+      return `<tr><td>${label}</td><td class="bindtxt ${listening ? '' : d ? (d.connected ? '' : 'off') : 'none'}">${listening ? (kind === 'axis' ? 'Move axis' : 'Press button') : d ? esc(d.text) + (d.connected ? '' : ' (unplugged)') : 'not bound'}</td>
         <td style="white-space:nowrap"><button data-a="bind" data-v="${kind}:${id}">${listening ? 'Cancel' : 'Bind'}</button>
         ${kind === 'axis' && d ? ` <button data-a="inv" data-v="${id}">${d.inv ? 'Inverted' : 'Normal'}</button>` : ''}${d ? ` <button data-a="clear" data-v="${kind}:${id}" class="ghost">Clear</button>` : ''}</td></tr>`;
     };
     const again = () => this.controls(back);
-    this.show('modal', 'controls', `<header><h2>Controls</h2><span class="price">${inp.pads.length} controller${inp.pads.length === 1 ? '' : 's'} connected</span></header><div class="body">
+    this.show('modal', 'controls', `<header><h2>Controls</h2><span class="price">${inp.pads.length} connected</span></header><div class="body">
       <h3>Settings</h3>
-      <div class="field"><label for="s-mouse">Mouse flying<small>Aim: point where to go. Yoke: the mouse is the stick.</small></label><select id="s-mouse" data-i="mouseMode"><option value="aim">Aim</option><option value="yoke">Yoke</option><option value="off">Off</option></select></div>
+      <div class="field"><label for="s-mouse">Mouse flying</label><select id="s-mouse" data-i="mouseMode"><option value="aim">Aim</option><option value="yoke">Yoke</option><option value="off">Off</option></select></div>
       <div class="field"><label for="s-sens">Mouse sensitivity</label><input id="s-sens" type="range" min="0.3" max="2.5" step="0.1" value="${st.mouseSens}" data-i="mouseSens"></div>
-      <div class="field"><label for="s-inv">Invert pitch for keys and mouse yoke<small>Off: S / mouse back pulls the nose up.</small></label><input id="s-inv" type="checkbox" ${st.invertPitch ? 'checked' : ''} data-i="invertPitch"></div>
-      <div class="field"><label for="s-assist">Flight assist for keyboard and mouse<small>Gently levels the wings when you let go. Joysticks always fly raw.</small></label><input id="s-assist" type="checkbox" ${st.assist ? 'checked' : ''} data-i="assist"></div>
+      <div class="field"><label for="s-inv">Invert pitch</label><input id="s-inv" type="checkbox" ${st.invertPitch ? 'checked' : ''} data-i="invertPitch"></div>
+      <div class="field"><label for="s-assist">Flight assist<small>Levels the wings hands-off. Keyboard and mouse only.</small></label><input id="s-assist" type="checkbox" ${st.assist ? 'checked' : ''} data-i="assist"></div>
       <div class="field"><label for="s-dz">Stick dead zone</label><input id="s-dz" type="range" min="0" max="0.3" step="0.01" value="${st.deadzone}" data-i="deadzone"></div>
-      <div class="field"><label for="s-curve">Stick response curve<small>Higher is gentler around the centre.</small></label><input id="s-curve" type="range" min="1" max="2.5" step="0.1" value="${st.curve}" data-i="curve"></div>
+      <div class="field"><label for="s-curve">Stick response curve</label><input id="s-curve" type="range" min="1" max="2.5" step="0.1" value="${st.curve}" data-i="curve"></div>
       <div class="field"><label for="s-vol">Sound volume</label><input id="s-vol" type="range" min="0" max="1" step="0.05" value="${st.volume}" data-i="volume"></div>
-      <div class="field"><label for="s-q">Graphics quality<small>Changing this reloads the game.</small></label><select id="s-q" data-i="quality"><option value="0">Low</option><option value="1">Medium</option><option value="2">High</option></select></div>
+      <div class="field"><label for="s-q">Graphics quality<small>Reloads the game.</small></label><select id="s-q" data-i="quality"><option value="0">Low</option><option value="1">Medium</option><option value="2">High</option></select></div>
       <h3>Controllers</h3>
-      <div id="devs">${inp.pads.length ? '' : '<p style="margin:0;color:var(--muted)">No controller detected. Plug in a gamepad, joystick, throttle or pedals and press any button on it.</p>'}</div>
+      <div id="devs">${inp.pads.length ? '' : '<p class="note">No controller. Plug one in and press a button on it.</p>'}</div>
       <h3>Axes</h3><table><tr><th>Action</th><th>Bound to</th><th></th></tr>${AXIS_ACTIONS.map(a => row('axis', a)).join('')}</table>
       <h3>Buttons</h3><table><tr><th>Action</th><th>Bound to</th><th></th></tr>${BUTTON_ACTIONS.map(a => row('button', a)).join('')}</table>
-      </div><footer><button data-a="close" class="primary">Done</button><button data-a="defaults">Reset bindings to defaults</button></footer>`,
+      </div><footer><button data-a="close" class="primary">Done</button><button data-a="defaults">Reset bindings</button></footer>`,
       {
         mouseMode: (v) => { st.mouseMode = v; G.persist(); }, mouseSens: (v) => { st.mouseSens = +v; G.persist(); }, invertPitch: (v) => { st.invertPitch = v; G.persist(); },
         assist: (v) => { st.assist = v; G.persist(); }, deadzone: (v) => { st.deadzone = +v; G.persist(); }, curve: (v) => { st.curve = +v; G.persist(); },

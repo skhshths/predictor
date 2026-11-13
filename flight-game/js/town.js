@@ -54,11 +54,13 @@ export function animatePerson(p, speed, dt) {
 function nameTag(name, role) {
   const c = document.createElement('canvas'); c.width = 512; c.height = 128;
   const g = c.getContext('2d');
-  g.font = '600 46px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  const w = Math.min(500, g.measureText(name).width + 60);
-  g.fillStyle = 'rgba(18,24,38,0.72)'; g.beginPath(); g.roundRect(256 - w / 2, 14, w, 70, 35); g.fill();
-  g.fillStyle = '#fff'; g.fillText(name, 256, 51);
-  if (role) { g.font = '500 28px system-ui, sans-serif'; g.fillStyle = 'rgba(255,255,255,0.92)'; g.strokeStyle = 'rgba(0,0,0,0.6)'; g.lineWidth = 5; g.strokeText(role, 256, 108); g.fillText(role, 256, 108); }
+  name = name.toUpperCase();
+  g.font = 'bold 40px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  const w = Math.min(500, g.measureText(name).width + 36);
+  g.fillStyle = 'rgba(0,0,0,0.78)'; g.fillRect(256 - w / 2, 18, w, 58);
+  g.fillStyle = '#ffd400'; g.fillRect(256 - w / 2, 18, 8, 58);
+  g.fillStyle = '#fff'; g.fillText(name, 260, 49);
+  if (role) { g.font = 'bold 24px Arial, sans-serif'; g.fillStyle = '#fff'; g.strokeStyle = 'rgba(0,0,0,0.75)'; g.lineWidth = 5; g.strokeText(role.toUpperCase(), 256, 102); g.fillText(role.toUpperCase(), 256, 102); }
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthWrite: false, transparent: true }));
   s.scale.set(2.6, 0.65, 1); s.position.y = 2.45; s.renderOrder = 5;

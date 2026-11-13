@@ -92,7 +92,7 @@ The desktop shell is `desktop/main.js`: an Electron window that serves the same 
 
 ## How to play
 
-1. Press **Start flying**. You begin on foot at the edge of town.
+1. Press **Start**. You begin on foot at the edge of town.
 2. Click the view to capture the mouse, then walk with **W A S D**. Press **E** next to a person to talk, or next to an aeroplane to board it.
 3. **Captain Ines** stands in front of the hangar. She opens the hangar, where you pick any aeroplane. It is rolled out onto the apron, ready to board.
 4. Your own plane is parked on the apron next to it.
@@ -143,7 +143,7 @@ Ctrl is deliberately unused, so Ctrl+W can never close the tab mid-flight.
 
 ### Mouse flying
 
-- **Aim** (default). Move the mouse to point a gold circle where you want to go. The aeroplane banks and pulls onto it by itself. This is the easiest way to fly with a mouse.
+- **Aim** (default). Move the mouse to point a yellow circle where you want to go. The aeroplane banks and pulls onto it by itself. This is the easiest way to fly with a mouse.
 - **Yoke**. The mouse is the control stick: left and right roll, forward and back pitch. A small box shows the stick position. Middle-click centres it.
 - **Off**. The mouse only looks around.
 
@@ -175,7 +175,7 @@ Axis numbering differs between manufacturers and browsers, so the defaults are a
 - **Controllers** shows every connected device with a live bar for each axis and a light for each button, so you can see which physical control is which.
 - Press **Bind** next to an action, then move the axis or press the button you want. Binding waits eight seconds and then gives up.
 - **Normal / Inverted** flips an axis. Use it if your throttle runs backwards.
-- **Clear** unbinds an action. **Reset bindings to defaults** starts again.
+- **Clear** unbinds an action. **Reset bindings** starts again.
 - **Stick dead zone** and **Stick response curve** apply to roll, pitch, rudder and look axes. The throttle has neither.
 
 Bindings are saved per device name, so each controller keeps its own setup. A dedicated throttle or pedal unit only replaces a binding the game guessed. It never replaces one you made yourself.
@@ -202,7 +202,7 @@ The heavies need the long home runway and full flaps. They will not stop on the 
 
 ## Building your own plane
 
-Your plane starts with the weakest part in every slot. It flies, but slowly. Talk to a shopkeeper on the main street to open their shop. The camera circles your plane while you browse, each part shows what it would change (top speed, stall speed, climb, roll, mass), and **Buy and fit** puts it on the aeroplane immediately. Parts you own can be swapped back for free.
+Your plane starts with the weakest part in every slot. It flies, but slowly. Talk to a shopkeeper on the main street to open their shop. The camera circles your plane while you browse, each part shows what it would change (top speed, stall speed, climb, roll, mass), and **Buy** puts it on the aeroplane immediately. Parts you own can be swapped back for free.
 
 | Shop | Keeper | Sells |
 | --- | --- | --- |
@@ -240,8 +240,8 @@ In flight, the round map at the bottom right shows airfields within 14 km as run
 
 ## Earning coins
 
-- **Parcels.** Postmaster Hobb, and the keeper at every airfield, offers two deliveries at a time. Pay is 140 coins plus 44 per kilometre. Follow the gold marker, land, and come to a stop on the field.
-- **Rings.** Twelve gold rings hang over the bay. Each is worth 40 coins, and all twelve in one flight earns 440 more. They reset when you stop at home.
+- **Parcels.** Postmaster Hobb, and the keeper at every airfield, offers two deliveries at a time. Pay is 140 coins plus 44 per kilometre. Follow the yellow marker, land, and come to a stop on the field.
+- **Rings.** Twelve yellow rings hang over the bay. Each is worth 40 coins, and all twelve in one flight earns 440 more. They reset when you stop at home.
 - **Discovery.** The first time you land and stop at a new airfield earns 300 coins.
 
 ## Graphics settings
@@ -277,7 +277,7 @@ The model is tuned to be approachable. It is not a study-level simulator: there 
 
 ```
 flight-game/
-├── index.html            Page, styles, and the overlay containers
+├── index.html            Page, styles (flat placard-style UI), and the overlay containers
 ├── js/
 │   ├── main.js           Game loop, walking, flying, cameras, jobs, rings, saving
 │   ├── world.js          Terrain height function, airfields, flattened zones (pure maths)
@@ -302,7 +302,7 @@ To add an aeroplane, add one `P(...)` entry to `LIBRARY` in `js/planes.js`. To a
 
 Progress saves automatically in the browser's local storage (or the app's own storage in the `.exe`): coins, parts owned and fitted, the plane's name, airfields discovered, the current parcel, settings and controller bindings.
 
-**Start a new game** in the pause menu erases progress and keeps settings and bindings. The browser version and the `.exe` keep separate saves.
+**New game** in the pause menu erases progress and keeps settings and bindings. The browser version and the `.exe` keep separate saves.
 
 ## What was tested
 
@@ -332,10 +332,10 @@ Not tested, so treat as unverified:
 | Throttle works backwards | Controls, then press **Normal** next to Throttle so it reads **Inverted** |
 | Aeroplane turns or pitches by itself with a stick plugged in | Raise **Stick dead zone**, or rebind the axis: the default guess may have picked the wrong one |
 | Mouse will not turn the camera | Click the 3D view to capture the mouse. Press Esc to release it |
-| Mouse keeps steering the aeroplane | Press **M** until it says "Mouse flying off" |
+| Mouse keeps steering the aeroplane | Press **M** until it says "Mouse: off" |
 | No sound | Sound starts after the first click. Check Sound volume in Controls |
 | Cannot get out of the aeroplane | You must be on the ground and stopped. Hold **B**, then press **Enter** |
-| Stuck somewhere | **Backspace** returns the aeroplane to the home runway. Pause, then **Return to Tailwind Bay** returns you and both aeroplanes home |
+| Stuck somewhere | **Backspace** returns the aeroplane to the home runway. Pause, then **Return to base** returns you and both aeroplanes home |
 | Windows blocks the `.exe` | It is unsigned. Choose **More info**, then **Run anyway** |
 
 ## Credits and licence
